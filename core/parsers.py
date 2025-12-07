@@ -59,8 +59,22 @@ def extract_tool_call(response: str) -> Optional[Dict[str, Any]]:
     start = raw.find('{')
     end = raw.rfind('}')
     if start >= 0 and end > start:
-        json_str = re.sub(r'\s+', ' ', raw[start:end+1])
-        return try_parse(json_str)
+        json_str = raw[start:end+1]
+        # Fix common escape issues
+        json_str = json_str.replace("\\'", "'")  # Fix wrong escapes
+        json_str = re.sub(r'\\n', '\\\\n', json_str)  # Normalize newlines
+        json_str = re.sub(r'\s+', ' ', json_str)  # Remove excess whitespace
+        result = try_parse(json_str)
+        if result:
+            return result
+    
+    # Strategy 5: Aggressive cleanup - remove all escapes and retry
+    if raw:
+        aggressive = re.sub(r'\\[\'"]', '"', raw)
+        aggressive = re.sub(r'[\n\r\t]', ' ', aggressive)
+        result = try_parse(aggressive)
+        if result:
+            return result
     
     return None
 

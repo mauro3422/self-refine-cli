@@ -66,7 +66,7 @@ class PythonExecTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Ejecuta código Python directamente y retorna el resultado."
+        return "Ejecuta código Python directamente. NO usar para crear archivos (usa write_file). Retorna el resultado."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:

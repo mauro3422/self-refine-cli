@@ -33,6 +33,16 @@ class ToolRegistry:
         for name, tool in self._tools.items():
             lines.append(f"- {name}: {tool.description[:60]}...")
         return "\n".join(lines)
+
+    def get_tools_prompt(self) -> str:
+        """Get detailed tool definitions with examples for system prompt"""
+        lines = []
+        for name in self._tools:
+            schema = self.get_tool_schema(name)
+            params = ", ".join([f"{k}: {v['type']}" for k, v in schema['parameters'].items()])
+            example = schema.get('example', '')
+            lines.append(f"### {name}({params})\n   Description: {schema['description']}\n   Example: {example}\n")
+        return "\n".join(lines)
     
     def get_tool_schema(self, name: str) -> Optional[Dict[str, Any]]:
         """Get detailed schema for a specific tool"""
@@ -81,13 +91,17 @@ class ToolRegistry:
         return "\n".join(lines)
     
     def execute_tool(self, name: str, **kwargs) -> Dict[str, Any]:
-        """Execute a tool by name"""
+        """Execute a tool by name, filtering to only valid parameters"""
         tool = self.get(name)
         if not tool:
             return {"success": False, "error": f"Tool '{name}' not found"}
         
         try:
-            return tool.execute(**kwargs)
+            # Filter kwargs to only include valid parameters for this tool
+            valid_params = tool.parameters.keys()
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_params}
+            
+            return tool.execute(**filtered_kwargs)
         except Exception as e:
             return {"success": False, "error": str(e)}
 

@@ -1,70 +1,72 @@
-# Prompts Module - All system prompts in one place
+# Prompts Module - Optimized for speed
+# Fixed: Single AGENT_SYSTEM_PROMPT with tools_schema included
 
-AGENT_SYSTEM_PROMPT = """You are an autonomous programming agent. You EXECUTE tasks, not explain them.
+AGENT_SYSTEM_PROMPT = """You are Poetiq, an advanced autonomous AI agent running on WINDOWS.
+Your goal is to solve the user's task efficiently using the available tools.
 
 WORKSPACE: {workspace}/
 
-AVAILABLE TOOLS:
-{tools_brief}
+AVAILABLE TOOLS (use ONLY these exact names):
+{tools_schema}
 
-To use a tool:
-```tool
-{{"tool": "TOOL_NAME", "params": {{"param": "value"}}}}
+FOR MULTI-STEP TASKS:
+Think step by step. For example, if asked to "list files and read X":
+1. First: list_dir to see what's there
+2. Then: read_file to read the specific file
+Execute ONE step at a time. Start with the FIRST step.
+
+CRITICAL RULES:
+1. OS AWARENESS: You are on Windows. Use 'dir', 'type', 'powershell', etc.
+2. TOOL NAMES: Use EXACTLY the tool names listed above. Do NOT invent tools.
+3. PARAMETERS: Use EXACTLY the parameter names shown in the schema.
+4. ONE TOOL PER RESPONSE: Only output ONE tool call, the FIRST step needed.
+5. PATHS: list_dir needs a DIRECTORY path, read_file needs a FILE path.
+
+RESPONSE FORMAT:
+```json
+{{"tool": "EXACT_TOOL_NAME", "params": {{"exact_param": "value"}}}}
 ```
-
-RULES:
-- "create/write file" → use write_file
-- "read file" → use read_file  
-- "list files" → use list_dir
-- "run/execute" → use python_exec or run_command
-
-MULTI-STEP: Do ONE tool at a time. After result, continue with next step.
-
 {memory_context}
-
-Language: Match user's language.
 """
 
-EVAL_PROMPT = """Evaluate this response:
+# Simplified evaluation - faster, more generous
+EVAL_PROMPT = """Rate this response 0-25:
 
-USER QUESTION: {user_input}
-TOOLS USED: {tools_used}
+TASK: {user_input}
 RESPONSE: {response}
-
-If user asked to CREATE file and write_file NOT used → SCORE: 0/25
-If user asked to READ file and read_file NOT used → SCORE: 0/25
-
-Score 1-5 each:
-1. Tool usage: __/5
-2. Accuracy: __/5
-3. Completeness: __/5
-4. Clarity: __/5
-5. Usefulness: __/5
-
-TOTAL_SCORE: __/25
-
-If >= 22: OPTIMAL_RESPONSE"""
-
-REFINE_PROMPT = """FAILED - You didn't use required tools.
-
-QUESTION: {user_input}
 TOOLS USED: {tools_used}
-FEEDBACK: {feedback}
 
-Use the correct tool NOW:
-```tool
-{{"tool": "write_file", "params": {{"path": "sandbox/file.py", "content": "code"}}}}
+Quick score (just output the number):
+- 20-25: Task completed with correct tool
+- 10-19: Partial completion
+- 0-9: Wrong tool or no tool
+
+SCORE: """
+
+# Minimal refine prompt
+REFINE_PROMPT = """Fix this:
+
+TASK: {user_input}
+TOOLS TRIED: {tools_used}
+PROBLEM: {feedback}
+
+AVAILABLE TOOLS (use ONLY these exact names):
+{tools_schema}
+
+INSTRUCTIONS:
+1. Use EXACTLY the tool names from the schema above (e.g., 'python_exec' NOT 'python').
+2. Use EXACTLY the parameter names from the schema (e.g., 'code' NOT 'filename').
+3. Output valid JSON ONLY. NO COMMENTS inside JSON.
+
+Correct tool usage:
+```json
+{{"tool": "...", "params": {{...}}}}
 ```"""
 
-VERIFICATION_PROMPT = """Verify this code works correctly:
+VERIFICATION_PROMPT = """Does this code work?
+CODE: {code}
+EXPECTED: {expected}
+ACTUAL: {output}
 
-CODE:
-{code}
+Answer YES or NO."""
 
-EXPECTED BEHAVIOR:
-{expected}
-
-ACTUAL OUTPUT:
-{output}
-
-Does it work? Answer YES or NO with brief explanation."""

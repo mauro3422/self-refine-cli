@@ -1,26 +1,27 @@
-# URLs, parámetros del modelo, paths - Self-Refine Configuration
+# Configuration - Self-Refine CLI with llama.cpp
 
-# LM Studio API Configuration
-LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
-MODEL_NAME = "lfm2"
+# llama.cpp Server
+SERVER_URL = "http://localhost:8000/v1"  # Local llama.cpp server
+
+# Model Parameters
+TEMPERATURE = 0.7
+TEMPERATURE_FEEDBACK = 0.3
+MAX_TOKENS = 4096
+
+# Poetiq Parameters
+NUM_WORKERS = 3          # Default parallel workers
+WORKER_TEMPS = [0.5, 0.7, 0.9]  # Temperatures for diversity
 
 # Self-Refine Parameters
-MAX_ITERATIONS = 5          # Maximum refinement iterations
-SCORE_THRESHOLD = 23        # Stop if score >= this (out of 25)
-FEEDBACK_DIMENSIONS = 5     # Number of evaluation dimensions
-
-# Model Parameters - INCREASED FOR LFM2
-TEMPERATURE = 0.7           # Generation temperature
-TEMPERATURE_FEEDBACK = 0.3  # Lower temp for more consistent evaluation
-MAX_TOKENS = 16000          # Increased for longer outputs (model has 128k context)
+MAX_ITERATIONS = 5
+SCORE_THRESHOLD = 22
+FEEDBACK_DIMENSIONS = 5
 
 # Execution Safety
-EXECUTION_TIMEOUT = 30      # Increased to 30s for longer operations
+EXECUTION_TIMEOUT = 30
 
-# Output Configuration
+# Paths
 OUTPUT_DIR = "outputs"
 LOG_FILE = "outputs/refine_history.json"
-
-# Agent Configuration
-AGENT_MAX_ITERATIONS = 10   # Max tool use iterations
-AGENT_WORKSPACE = "sandbox" # Agent's workspace folder
+AGENT_MAX_ITERATIONS = 10
+AGENT_WORKSPACE = "sandbox"

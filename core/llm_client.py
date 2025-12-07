@@ -1,31 +1,32 @@
-# Cliente para LM Studio API
+# LLM Client - llama.cpp Server Only
+# Uses OpenAI-compatible API on local server
 
-import requests
-from typing import List, Dict
-from config.settings import LM_STUDIO_URL, MODEL_NAME, TEMPERATURE, MAX_TOKENS
+from openai import OpenAI
+from config.settings import SERVER_URL, TEMPERATURE, MAX_TOKENS
 
 
 class LLMClient:
-    def __init__(self):
-        self.url = LM_STUDIO_URL
-        self.model = MODEL_NAME
+    """Client for llama.cpp server via OpenAI protocol"""
     
-    def chat(self, messages: List[Dict[str, str]], temp: float = TEMPERATURE) -> str:
-        """Llama a LM Studio API"""
+    def __init__(self):
+        self.client = OpenAI(
+            base_url=SERVER_URL,
+            api_key="not-needed"
+        )
+    
+    def chat(self, messages: list, temp: float = TEMPERATURE) -> str:
+        """Send chat request to llama.cpp server"""
         try:
-            resp = requests.post(self.url, json={
-                "model": self.model,
-                "messages": messages,
-                "temperature": temp,
-                "max_tokens": MAX_TOKENS
-            }, timeout=120)
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
-        except requests.exceptions.ConnectionError:
-            return "ERROR: LM Studio no está corriendo en localhost:1234"
+            response = self.client.chat.completions.create(
+                model="local-model",
+                messages=messages,
+                temperature=temp,
+                max_tokens=MAX_TOKENS,
+            )
+            return response.choices[0].message.content
         except Exception as e:
             return f"ERROR: {str(e)}"
     
     def generate(self, prompt: str, temp: float = TEMPERATURE) -> str:
-        """Wrapper simple para single prompt"""
+        """Simple wrapper for single prompt"""
         return self.chat([{"role": "user", "content": prompt}], temp)

@@ -1,4 +1,15 @@
-# Agent Module - Simplified orchestration using modular components
+# =============================================================================
+# ⚠️ DEPRECATED - Use core/poetiq.py instead
+# =============================================================================
+# This file contains the original Agent implementation before Poetiq.
+# It is kept for reference but should NOT be used in production.
+# 
+# For the active implementation, see:
+#   - core/poetiq.py → PoetiqRunner (parallel workers + aggregation)
+#   - Use run_poetiq() or PoetiqRunner.run() for new tasks
+# =============================================================================
+
+# Agent Module - LEGACY (Simplified orchestration using modular components)
 # Now uses: prompts, parsers, evaluator, parallel, verification
 
 import json
@@ -39,7 +50,8 @@ class Agent:
         max_refine: int = 3,
         use_parallel: bool = False,
         num_candidates: int = 3,
-        debug: bool = True
+        debug: bool = True,
+        single_shot: bool = False  # For parallel workers - no self-refine
     ):
         self.llm = LLMClient()
         self.registry = get_registry()
@@ -52,6 +64,7 @@ class Agent:
         self.max_refine = max_refine
         self.num_candidates = num_candidates
         self.use_parallel = use_parallel
+        self.single_shot = single_shot  # Skip self-refine for speed
         
         self.conversation_history: List[Dict[str, str]] = []
         self.workspace = AGENT_WORKSPACE
@@ -257,8 +270,8 @@ class Agent:
         
         final_response = response.strip()
         
-        # Self-refine
-        if len(final_response) > 30:
+        # Self-refine (skip in single_shot mode for parallel workers)
+        if not self.single_shot and len(final_response) > 30:
             print("  🔄 Self-Refine...")
             final_response = self._self_refine(final_response, user_input)
         

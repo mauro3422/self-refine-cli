@@ -54,7 +54,7 @@ class WriteFileTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Escribe contenido a un archivo. Crea el archivo si no existe."
+        return "Escribe contenido a un archivo. PREFERIDO para crear nuevos archivos o sobrescribir. Crea el archivo si no existe."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:

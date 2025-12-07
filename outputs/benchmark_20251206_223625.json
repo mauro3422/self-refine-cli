@@ -1,0 +1,64 @@
+{
+  "timestamp": "2025-12-06T22:36:25.599472",
+  "results": [
+    {
+      "task_type": "read",
+      "task": "lee el archivo sandbox/README.md y dame un resumen",
+      "score": 20,
+      "success": true,
+      "duration": 98.1,
+      "tools_used": [
+        "read_file"
+      ],
+      "iterations": 2
+    },
+    {
+      "task_type": "list",
+      "task": "lista los archivos en el directorio sandbox",
+      "score": 10,
+      "success": false,
+      "duration": 94.3,
+      "tools_used": [],
+      "iterations": 2
+    },
+    {
+      "task_type": "write",
+      "task": "crea un archivo llamado sandbox/hello.py que impri",
+      "score": 20,
+      "success": true,
+      "duration": 114.7,
+      "tools_used": [
+        "write_file"
+      ],
+      "iterations": 2
+    },
+    {
+      "task_type": "execute",
+      "task": "ejecuta python y muestra 2+2",
+      "score": 20,
+      "success": true,
+      "duration": 52.8,
+      "tools_used": [
+        "python_exec"
+      ],
+      "iterations": 1
+    },
+    {
+      "task_type": "analyze",
+      "task": "lee sandbox/test_agent.py y dime qu\u00e9 hace",
+      "score": 10,
+      "success": false,
+      "duration": 113.2,
+      "tools_used": [
+        "read_file"
+      ],
+      "iterations": 2
+    }
+  ],
+  "summary": {
+    "total_tasks": 5,
+    "success_rate": 0.6,
+    "avg_score": 16.0,
+    "total_time": 473.1
+  }
+}

@@ -1,162 +1,107 @@
-# Entry point - Self-Refine CLI - SIMPLIFIED
+# Self-Refine CLI with Poetiq Parallel System
+# Main entry point
 
 import sys
 import argparse
-from modules.code_gen import CodeGenerator
-from modules.data_analysis import DataAnalyzer
-from modules.debugger import CodeDebugger
-from utils.logger import RefineLogger
-from utils.file_handler import FileHandler
-from core.agent import Agent, init_tools
+from core.poetiq import PoetiqRunner
+from tools.file_tools import register_file_tools
+from tools.command_tools import register_command_tools
 
+
+from utils.logger import get_logger
 
 def print_banner():
-    """Print CLI banner"""
     print("\n" + "="*60)
-    print("🚀 Self-Refine CLI v2")
-    print("   Arquitectura: Self-Refine + ReAct Agent")
-    print("   Modelo: LFM2 via LM Studio")
+    print("🚀 Self-Refine CLI v3 - Poetiq Edition")
+    print("   Architecture: Parallel Workers + Voting")
+    print("   Backend: llama.cpp GPU")
     print("="*60)
 
 
-def run_agent_mode():
-    """Modo agente - ÚNICO MODO INTERACTIVO"""
+def init_system():
+    """Initialize tools and return Poetiq runner"""
+    print("\n🔧 Initializing...")
+    register_file_tools()
+    register_command_tools()
+    runner = PoetiqRunner(num_workers=3)
+    get_logger().log_info("System initialized and ready.")
+    return runner
+
+
+def run_interactive():
+    """Interactive mode with Poetiq parallel system"""
     print_banner()
     
-    init_tools()
+    runner = init_system()
     
-    print("🤖 Agente Autónomo con Self-Refine")
-    print("   • Todas las respuestas pasan por Self-Refine")
-    print("   • Uso automático de herramientas cuando se necesitan")
-    print("\n   Comandos: 'exit', 'clear', 'tools', 'help', 'memory'")
+    print("\n🤖 Poetiq Agent (3 parallel workers)")
+    print("   Commands: 'exit', 'help'")
     print("-"*60)
-    
-    agent = Agent()
     
     while True:
         try:
-            user_input = input("\n🧑 Tú: ").strip()
+            user_input = input("\n🧑 You: ").strip()
         except (KeyboardInterrupt, EOFError):
-            print("\n👋 ¡Hasta luego!")
+            print("\n👋 Bye!")
             break
         
         if not user_input:
             continue
         
-        # Comandos especiales
         if user_input.lower() in ['exit', 'quit', 'salir']:
-            print("👋 ¡Hasta luego!")
+            print("👋 Bye!")
             break
-        
-        if user_input.lower() in ['clear', 'limpiar']:
-            agent.clear_history()
-            continue
-        
-        if user_input.lower() == 'tools':
-            from tools.registry import get_registry
-            print("\n" + get_registry().get_tools_description())
-            continue
-        
-        if user_input.lower() == 'memory':
-            from utils.memory import get_memory
-            mem = get_memory()
-            stats = mem.stats()
-            print(f"\n📊 Memoria: {sum(stats.values())} lecciones guardadas")
-            for t, c in stats.items():
-                print(f"   {t}: {c}")
-            continue
         
         if user_input.lower() == 'help':
             print("""
-📖 Self-Refine CLI - Ayuda
+📖 Poetiq CLI - Help
 
-El agente usa automáticamente:
-  • read_file cuando pides leer archivos
-  • list_dir cuando pides listar directorios
-  • python_exec cuando pides ejecutar código
-  • write_file cuando pides crear archivos
+The system runs 3 parallel workers, votes on best response,
+then executes the winning tool.
 
-Cada respuesta pasa por Self-Refine:
-  1. Genera respuesta
-  2. Evalúa calidad (score /25)
-  3. Si score < 22, refina iterativamente
-
-EJEMPLOS:
-  "lee el archivo README.md y resúmelo"
-  "lista los archivos en tools/"
-  "crea un script que calcule fibonacci en sandbox/"
-  "ejecuta print(2+2)"
+EXAMPLES:
+  "list files in sandbox/"
+  "create hello.py with print('Hello')"
+  "read README.md"
             """)
             continue
         
-        # Ejecutar agente
-        response = agent.run(user_input)
-        print(f"\n🤖 Agente:\n{response}")
+        # Run Poetiq
+        result = runner.run(user_input)
+        
+        print(f"\n🤖 Agent:\n{result['response']}")
+        if result.get('tool_result'):
+            print(f"\n📁 Tool output: {result['tool_result'][:200]}")
 
 
-def run_command_mode(args):
-    """Modo comando directo"""
-    logger = RefineLogger()
-    
+def run_single(task: str):
+    """Single task mode"""
     print_banner()
-    
-    result = None
-    
-    if args.mode == 'code':
-        print(f"\n📝 Generando código...")
-        gen = CodeGenerator()
-        result = gen.generate_with_refinement(args.input)
-        
-    elif args.mode == 'analysis':
-        print(f"\n📊 Analizando...")
-        if not FileHandler.validate_file(args.input):
-            print(f"❌ Archivo no encontrado: {args.input}")
-            sys.exit(1)
-        analyzer = DataAnalyzer()
-        result = analyzer.analyze_csv(args.input, args.task)
-        
-    elif args.mode == 'debug':
-        print(f"\n🐛 Debuggeando...")
-        debugger = CodeDebugger()
-        result = debugger.debug(args.input)
-    
-    if result:
-        print("\n" + "="*60)
-        print("🎯 RESULTADO:")
-        print("="*60)
-        print(result.get('final_output', result))
-        if 'improvement_summary' in result:
-            print(f"\n📈 {result['improvement_summary']}")
+    runner = init_system()
+    result = runner.run(task)
+    print(f"\n📝 Result:\n{result['response']}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Self-Refine CLI - Agente con auto-mejora',
+        description='Self-Refine CLI with Poetiq Parallel System',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Uso:
-  python main.py              # Modo interactivo (recomendado)
-  python main.py code "tarea" # Generar código
-  python main.py debug "code" # Debuggear
+Usage:
+  python main.py              # Interactive mode
+  python main.py "task"       # Single task
         """
     )
     
-    parser.add_argument('mode', 
-                        nargs='?',
-                        choices=['code', 'analysis', 'debug'],
-                        default=None)
-    parser.add_argument('input', nargs='?', default='')
-    parser.add_argument('--task', default='análisis general')
+    parser.add_argument('task', nargs='?', default=None)
+    parser.add_argument('--workers', '-w', type=int, default=3)
     
     args = parser.parse_args()
     
-    if args.mode is None:
-        run_agent_mode()
+    if args.task:
+        run_single(args.task)
     else:
-        if not args.input:
-            print("❌ Se requiere input")
-            sys.exit(1)
-        run_command_mode(args)
+        run_interactive()
 
 
 if __name__ == "__main__":

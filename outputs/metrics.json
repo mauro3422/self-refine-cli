@@ -1,0 +1,68 @@
+{
+  "history": [
+    {
+      "task": "lee el archivo sandbox/README.md y dame un resumen",
+      "started": "2025-12-06T22:28:22.600795",
+      "phases": {},
+      "total_time": 98.123069,
+      "ended": "2025-12-06T22:30:00.723864",
+      "success": true,
+      "score": 20
+    },
+    {
+      "task": "lista los archivos en el directorio sandbox",
+      "started": "2025-12-06T22:30:02.726221",
+      "phases": {},
+      "total_time": 94.269101,
+      "ended": "2025-12-06T22:31:36.995322",
+      "success": false,
+      "score": 10
+    },
+    {
+      "task": "crea un archivo llamado sandbox/hello.py que imprima 'Hola Mundo'",
+      "started": "2025-12-06T22:31:38.996638",
+      "phases": {},
+      "total_time": 114.651183,
+      "ended": "2025-12-06T22:33:33.647821",
+      "success": true,
+      "score": 20
+    },
+    {
+      "task": "ejecuta python y muestra 2+2",
+      "started": "2025-12-06T22:33:35.649158",
+      "phases": {},
+      "total_time": 52.788132,
+      "ended": "2025-12-06T22:34:28.437290",
+      "success": true,
+      "score": 20
+    },
+    {
+      "task": "lee sandbox/test_agent.py y dime qu\u00e9 hace",
+      "started": "2025-12-06T22:34:30.438238",
+      "phases": {},
+      "total_time": 113.158858,
+      "ended": "2025-12-06T22:36:23.597096",
+      "success": false,
+      "score": 10
+    },
+    {
+      "task": "lee el archivo sandbox/README.md y dame un resumen",
+      "started": "2025-12-06T23:15:27.387424",
+      "phases": {},
+      "total_time": 188.287757,
+      "ended": "2025-12-06T23:18:35.675181",
+      "success": true,
+      "score": 20
+    },
+    {
+      "task": "lista los archivos en el directorio sandbox",
+      "started": "2025-12-06T23:18:37.676246",
+      "phases": {},
+      "total_time": 118.319945,
+      "ended": "2025-12-06T23:20:35.996191",
+      "success": true,
+      "score": 20
+    }
+  ],
+  "updated": "2025-12-06T23:20:35.996843"
+}
