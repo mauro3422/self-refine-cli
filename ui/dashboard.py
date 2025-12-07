@@ -305,11 +305,11 @@ def dashboard():
 # === FRESH DATA FUNCTIONS (read from disk, no singletons) ===
 import json
 import os
-from config.settings import OUTPUT_DIR
+from config.settings import DATA_DIR, OUTPUT_DIR
 
 def read_memory_file():
     """Read memory directly from disk file"""
-    path = os.path.join(OUTPUT_DIR, "agent_memory.json")
+    path = os.path.join(DATA_DIR, "agent_memory.json")
     if os.path.exists(path):
         try:
             with open(path, 'r', encoding='utf-8') as f:
@@ -321,7 +321,7 @@ def read_memory_file():
 
 def read_graph_file():
     """Read graph directly from disk file"""
-    path = os.path.join(OUTPUT_DIR, "memory_graph.json")
+    path = os.path.join(DATA_DIR, "memory_graph.json")
     if os.path.exists(path):
         try:
             with open(path, 'r', encoding='utf-8') as f:
@@ -388,12 +388,12 @@ def api_logs():
 @app.route('/api/clear', methods=['POST'])
 def api_clear():
     """Clear memory by writing empty file"""
-    path = os.path.join(OUTPUT_DIR, "agent_memory.json")
+    path = os.path.join(DATA_DIR, "agent_memory.json")
     with open(path, 'w', encoding='utf-8') as f:
         json.dump({"memories": [], "updated": "", "count": 0}, f)
     
     # Also clear graph
-    graph_path = os.path.join(OUTPUT_DIR, "memory_graph.json")
+    graph_path = os.path.join(DATA_DIR, "memory_graph.json")
     with open(graph_path, 'w', encoding='utf-8') as f:
         json.dump({"nodes": [], "edges": []}, f)
     

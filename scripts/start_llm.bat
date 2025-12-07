@@ -2,13 +2,15 @@
 title Llama Server (Vulkan GPU)
 color 0A
 
+:: Ensure we are in project root
+cd /d %~dp0..
+
 echo ============================================
 echo          LLAMA.CPP SERVER - GPU MODE
 echo ============================================
 echo.
 
-REM Kill any existing llama-server processes first
-echo Checking for existing server processes...
+:: Kill any existing llama-server processes
 taskkill /F /IM llama-server.exe 2>nul
 if %ERRORLEVEL%==0 (
     echo [OK] Killed old server process
@@ -16,22 +18,20 @@ if %ERRORLEVEL%==0 (
 ) else (
     echo [OK] No old server running
 )
-echo.
 
 echo Model: LFM2-1.2B-F16
 echo Port: 8000
 echo Parallel Slots: 6
 echo GPU Layers: ALL (Vulkan)
 echo.
-echo Starting server... 
-echo.
-echo ============================================
-echo    SERVER RUNNING - KEEP THIS WINDOW OPEN
-echo    Press Ctrl+C to stop
-echo ============================================
-echo.
 
 cd server
+if not exist llama-server.exe (
+    echo ❌ Error: llama-server.exe not found in server/ directory!
+    pause
+    exit /b 1
+)
+
 llama-server.exe --model "C:/Users/mauro/.lmstudio/models/LiquidAI/LFM2-1.2B-GGUF/LFM2-1.2B-F16.gguf" ^
     --port 8000 ^
     --host 0.0.0.0 ^
@@ -40,8 +40,4 @@ llama-server.exe --model "C:/Users/mauro/.lmstudio/models/LiquidAI/LFM2-1.2B-GGU
     --parallel 6 ^
     --cont-batching
 
-echo.
-echo ============================================
-echo SERVER STOPPED
-echo ============================================
 pause

@@ -48,7 +48,8 @@ class SmartMemory:
                     self.memories = data.get("memories", [])
                     # Apply decay on load
                     self._apply_decay()
-            except:
+            except Exception as e:
+                print(f"❌ Error loading memory from {self.path}: {e}")
                 self.memories = []
     
     def _save(self):

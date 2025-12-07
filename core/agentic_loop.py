@@ -20,9 +20,10 @@ class AgenticLoop:
     
     MAX_ITERATIONS = 5  # Safety limit
     
-    def __init__(self, executor, workspace: str = "sandbox"):
+    def __init__(self, executor, workspace: str = "sandbox", orchestrator=None):
         self.executor = executor
         self.workspace = workspace
+        self.orchestrator = orchestrator  # NEW: Access to memory
         self.llm = LLMClient()
         self.registry = get_registry()
         self.tools_executed: List[Dict] = []
@@ -151,13 +152,24 @@ YOUR RESPONSE:"""
         
         tools_schema = self.registry.get_tools_prompt()
         
+        # Get tips from memory if available
+        memory_tips = ""
+        if self.orchestrator:
+            try:
+                # Quick context check for this specific error
+                ctx = self.orchestrator.get_context(f"{failed_tool} error {error}", use_llm=False)
+                if ctx.tips:
+                    memory_tips = f"\n💡 MEMORY TIPS:\n{ctx.tips}\n"
+            except:
+                pass
+
         prompt = f"""A tool execution FAILED. You need to try a different approach.
 
 ORIGINAL TASK: {task}
 
 FAILED TOOL: {failed_tool}
 ERROR: {error}
-
+{memory_tips}
 AVAILABLE TOOLS (use ONLY these exact names):
 {tools_schema}
 

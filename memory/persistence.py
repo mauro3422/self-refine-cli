@@ -8,12 +8,14 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from zipfile import ZipFile
 
-from config.settings import OUTPUT_DIR
+from config.settings import DATA_DIR, OUTPUT_DIR
 
 
 class MemoryPersistence:
     """
     Handles export/import of memory state for backup and sharing.
+    Reads from DATA_DIR (persistent memory storage).
+    Exports to OUTPUT_DIR (transient backups).
     """
     
     EXPORT_FILES = [
@@ -22,13 +24,14 @@ class MemoryPersistence:
         "embedding_cache.json"
     ]
     
-    def __init__(self, output_dir: str = None):
-        self.output_dir = output_dir or OUTPUT_DIR
+    def __init__(self, data_dir: str = None, export_dir: str = None):
+        self.data_dir = data_dir or DATA_DIR  # Where memory lives
+        self.export_dir = export_dir or OUTPUT_DIR  # Where backups go
     
     def export_to_json(self, export_path: str = None) -> str:
         """Export all memory to a single JSON file"""
         export_path = export_path or os.path.join(
-            self.output_dir, 
+            self.export_dir, 
             f"memory_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         )
         
@@ -39,7 +42,7 @@ class MemoryPersistence:
         }
         
         for filename in self.EXPORT_FILES:
-            filepath = os.path.join(self.output_dir, filename)
+            filepath = os.path.join(self.data_dir, filename)
             if os.path.exists(filepath):
                 try:
                     with open(filepath, 'r', encoding='utf-8') as f:
@@ -55,13 +58,13 @@ class MemoryPersistence:
     def export_to_zip(self, export_path: str = None) -> str:
         """Export all memory files to a ZIP archive"""
         export_path = export_path or os.path.join(
-            self.output_dir,
+            self.export_dir,
             f"memory_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
         )
         
         with ZipFile(export_path, 'w') as zipf:
             for filename in self.EXPORT_FILES:
-                filepath = os.path.join(self.output_dir, filename)
+                filepath = os.path.join(self.data_dir, filename)
                 if os.path.exists(filepath):
                     zipf.write(filepath, filename)
             
@@ -94,7 +97,7 @@ class MemoryPersistence:
             if content is None:
                 continue
             
-            filepath = os.path.join(self.output_dir, filename)
+            filepath = os.path.join(self.data_dir, filename)
             
             try:
                 if merge and os.path.exists(filepath):
@@ -128,7 +131,7 @@ class MemoryPersistence:
                 if filename in zipf.namelist():
                     try:
                         content = zipf.read(filename)
-                        filepath = os.path.join(self.output_dir, filename)
+                        filepath = os.path.join(self.data_dir, filename)
                         
                         with open(filepath, 'wb') as f:
                             f.write(content)
@@ -168,7 +171,7 @@ class MemoryPersistence:
     
     def create_backup(self) -> str:
         """Create a timestamped backup of all memory files"""
-        backup_dir = os.path.join(self.output_dir, "backups")
+        backup_dir = os.path.join(self.export_dir, "backups")
         os.makedirs(backup_dir, exist_ok=True)
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -176,7 +179,7 @@ class MemoryPersistence:
         os.makedirs(backup_path, exist_ok=True)
         
         for filename in self.EXPORT_FILES:
-            src = os.path.join(self.output_dir, filename)
+            src = os.path.join(self.data_dir, filename)
             if os.path.exists(src):
                 shutil.copy2(src, backup_path)
         

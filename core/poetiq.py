@@ -111,7 +111,8 @@ class SelfRefiner:
             if test_cases and 'python_exec' in tools_used:
                 code = self._extract_code_from_response(current_response)
                 if code:
-                    verify_result = self.verifier.verify(code, test_cases)
+                    # Use verify_and_learn to persist lessons found during verification
+                    verify_result = self.verifier.verify_and_learn(code, test_cases, task_hint=task)
                     verification_passed = verify_result.passed
                     print(f"    🧪 Verification: {verify_result.passed_tests}/{verify_result.total_tests} passed")
                     if not verify_result.passed:
@@ -453,8 +454,8 @@ class PoetiqRunner:
             # Import here to avoid circular
             from core.agentic_loop import AgenticLoop
             
-            # Use agentic loop for multi-tool execution
-            agentic = AgenticLoop(self.executor)
+            # Use agentic loop for multi-tool execution with memory access
+            agentic = AgenticLoop(self.executor, orchestrator=self.orchestrator)
             loop_result = agentic.run(task, refined["response"])
             
             # Combine all results
