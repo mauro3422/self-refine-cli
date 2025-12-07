@@ -21,7 +21,8 @@ FEEDBACK_DIMENSIONS = 5
 EXECUTION_TIMEOUT = 30
 
 # Paths
-OUTPUT_DIR = "outputs"
+DATA_DIR = "data"         # Persistent data: memories, graph, cache
+OUTPUT_DIR = "outputs"    # Transient data: logs, sessions
 LOG_FILE = "outputs/refine_history.json"
 AGENT_MAX_ITERATIONS = 10
 AGENT_WORKSPACE = "sandbox"

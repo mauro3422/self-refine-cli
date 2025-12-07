@@ -69,8 +69,8 @@ class WorkingMemory:
         print(f"✅ Indexed {count} project files.")
     
     def _index_file(self, full_path: str, rel_path: str):
-        """Read and vectorise a single file"""
-        # Skip if already indexed (MVP logic, could be improved with timestamps)
+        """Read and vectorise a single file with intelligent chunking"""
+        # Skip if already indexed
         if rel_path in self.indexed_files:
             return
 
@@ -79,26 +79,74 @@ class WorkingMemory:
             
         if not content.strip():
             return
-            
-        # Chunking strategy could be added here.
-        # For now, we store the full file content if reasonably small,
-        # or just the beginning/summary if huge. 
-        # DeepSeek-OCR style would be "visual", here we use "semantic text".
         
-        # Limit content size for embedding (model dependent, usually 8k tokens approx)
-        # Taking first 6000 chars as a heuristic safe limit for embedding context
-        truncated_content = content[:6000] 
+        # Intelligent chunking for Python files
+        if rel_path.endswith('.py'):
+            chunks = self._chunk_python(content, rel_path)
+        else:
+            # For non-Python, use simple truncation
+            chunks = [{"content": content[:6000], "type": "full_file"}]
         
-        self.collection.add(
-            documents=[truncated_content],
-            ids=[f"file_{rel_path}"],
-            metadatas=[{
-                "type": "file_content", 
-                "path": rel_path,
-                "timestamp": str(os.path.getmtime(full_path))
-            }]
-        )
+        for i, chunk in enumerate(chunks):
+            chunk_id = f"file_{rel_path}_{i}" if len(chunks) > 1 else f"file_{rel_path}"
+            self.collection.add(
+                documents=[chunk["content"]],
+                ids=[chunk_id],
+                metadatas=[{
+                    "type": chunk.get("type", "chunk"), 
+                    "path": rel_path,
+                    "chunk_name": chunk.get("name", ""),
+                    "chunk_index": i,
+                    "timestamp": str(os.path.getmtime(full_path))
+                }]
+            )
         self.indexed_files.add(rel_path)
+    
+    def _chunk_python(self, content: str, path: str) -> List[Dict]:
+        """Split Python file into function/class chunks"""
+        import re
+        chunks = []
+        
+        # Find all function and class definitions
+        pattern = r'^(class\s+\w+|def\s+\w+)'
+        lines = content.split('\n')
+        
+        current_chunk = []
+        current_name = "header"
+        
+        for line in lines:
+            if re.match(pattern, line.strip()):
+                # Save previous chunk if exists
+                if current_chunk:
+                    chunk_text = '\n'.join(current_chunk)
+                    if len(chunk_text.strip()) > 20:  # Skip tiny chunks
+                        chunks.append({
+                            "content": chunk_text[:4000],
+                            "type": "function" if "def " in current_name else "class",
+                            "name": current_name
+                        })
+                # Start new chunk
+                match = re.match(r'^(class|def)\s+(\w+)', line.strip())
+                current_name = match.group(2) if match else "unknown"
+                current_chunk = [line]
+            else:
+                current_chunk.append(line)
+        
+        # Don't forget last chunk
+        if current_chunk:
+            chunk_text = '\n'.join(current_chunk)
+            if len(chunk_text.strip()) > 20:
+                chunks.append({
+                    "content": chunk_text[:4000],
+                    "type": "function" if "def " in current_name else "class",
+                    "name": current_name
+                })
+        
+        # If no chunks found or file too small, return whole file
+        if not chunks or len(content) < 500:
+            return [{"content": content[:6000], "type": "full_file", "name": path}]
+        
+        return chunks[:10]  # Max 10 chunks per file
 
     def search_project(self, query: str, n: int = 3) -> List[Dict]:
         """Search specifically in project files"""

@@ -21,7 +21,7 @@ class VectorMemory:
     Stores memories as embeddings for semantic search.
     """
     
-    def __init__(self, persist_dir: str = "outputs/vector_memory"):
+    def __init__(self, persist_dir: str = "data/vector_memory"):
         self.persist_dir = persist_dir
         self.collection = None
         
@@ -61,10 +61,12 @@ class VectorMemory:
                 try:
                     # 3. Fallback to Ephemeral (RAM)
                     print("🔄 Falling back to Ephemeral (In-Memory) Client...")
+                    print("⚠️  WARNING: Memory vectors will NOT persist between runs!")
                     self.client = chromadb.EphemeralClient()
                     self.collection = self.client.get_or_create_collection(name="agent_memory")
                 except Exception as e_crit:
                     print(f"❌ Critical ChromaDB Failure: {e_crit}")
+                    print("❌ Vector memory is DISABLED - semantic search will not work!")
                     self.collection = None
     
     def add(self, text: str, metadata: Dict = None) -> bool:

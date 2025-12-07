@@ -24,18 +24,20 @@ class MemoryLearner:
                            final_score: int,
                            iterations: int,
                            tool_results: Dict = None,
-                           errors: List[str] = None) -> Dict:
+                           errors: List[str] = None,
+                           workers_data: List[Dict] = None) -> Dict:
         """
         Analyze a session and extract lessons with rich metadata.
+        Now accepts workers_data for richer learning context.
         """
         # Determine if session was successful
         success = final_score >= 18 and iterations <= 2
         improved = final_score > initial_score
         
-        # Build analysis prompt
+        # Build analysis prompt with workers data
         prompt = self._build_analysis_prompt(
             task, initial_score, final_score, 
-            iterations, tool_results, errors
+            iterations, tool_results, errors, workers_data
         )
         
         response = self.llm.generate(prompt, temp=0.3)
@@ -92,25 +94,44 @@ class MemoryLearner:
             "importance": base_importance
         }
     
-    def _build_analysis_prompt(self, task, initial, final, iterations, tools, errors):
-        tools_str = str(tools) if tools else "None"
-        errors_str = "\n".join(errors) if errors else "None"
+    def _build_analysis_prompt(self, task, initial, final, iterations, tools, errors, workers_data=None):
+        """Build a strict, concise prompt that generates actionable rules"""
+        tools_str = ", ".join(tools.keys()) if isinstance(tools, dict) else str(tools) if tools else "None"
+        errors_str = errors[0][:100] if errors else "None"
         
-        return f"""Analyze this AI session and extract 1-2 specific lessons:
+        # Simplified workers summary
+        workers_summary = ""
+        if workers_data:
+            tools_used = [w.get('tool', 'none') for w in workers_data if w.get('tool')]
+            workers_summary = f"Workers used: {', '.join(set(tools_used))}" if tools_used else ""
+        
+        success = "SUCCESS" if final >= 18 else "PARTIAL" if final >= 12 else "FAIL"
+        
+        return f"""Extract ONE actionable, GENERALIZED rule from this session.
 
-TASK: {task}
-SCORES: {initial}/25 → {final}/25
-ITERATIONS: {iterations}
-TOOLS USED: {tools_str}
-ERRORS: {errors_str}
+TASK: {task[:150]}
+RESULT: {success} (score {initial}→{final}/25, {iterations} iterations)
+TOOLS: {tools_str}
+ERROR: {errors_str}
+{workers_summary}
 
-What specific lessons should the AI remember?
-Focus on:
-- Tool usage patterns that worked/failed
-- Common mistakes to avoid
-- Successful strategies
+OUTPUT FORMAT (pick ONE):
+RULE: When [general situation], use [tool_name](param=[placeholder])
+AVOID: Don't [general mistake] because [reason]
 
-LESSONS (1-2 bullet points, be specific):"""
+CRITICAL - GENERALIZATION RULES:
+- Do NOT use specific file names like 'sandbox/foo.py' → use [file] or [target_file]
+- Do NOT use specific variable names → use [variable], [function], [class]
+- Do NOT use specific paths → use [directory], [path], [workspace]
+- The rule should apply to ANY similar situation, not just this specific task
+
+REQUIREMENTS:
+- Use EXACT tool names: read_file, write_file, python_exec, list_dir, search_files, replace_in_file
+- Use placeholders: [file], [content], [code], [target], [replacement], [pattern]
+- ONE sentence max, no fluff
+- If session was trivial, output: SKIP
+
+YOUR GENERALIZED RULE:"""
     
     def _extract_lessons(self, text: str) -> List[str]:
         """Extract lessons from LLM response - handles multiple formats"""

@@ -7,7 +7,7 @@ import os
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 
-from config.settings import OUTPUT_DIR
+from config.settings import DATA_DIR
 
 
 class EmbeddingCache:
@@ -20,7 +20,7 @@ class EmbeddingCache:
     TTL_HOURS = 24  # Cache validity
     
     def __init__(self, path: str = None):
-        self.path = path or os.path.join(OUTPUT_DIR, "embedding_cache.json")
+        self.path = path or os.path.join(DATA_DIR, "embedding_cache.json")
         self.cache: Dict[str, Dict] = {}
         self._load()
     

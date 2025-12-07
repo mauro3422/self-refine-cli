@@ -9,7 +9,7 @@ from datetime import datetime
 from functools import wraps
 from contextlib import contextmanager
 
-from config.settings import OUTPUT_DIR
+from config.settings import DATA_DIR
 
 
 class MetricsCollector:
@@ -19,7 +19,7 @@ class MetricsCollector:
     """
     
     def __init__(self, path: str = None):
-        self.path = path or os.path.join(OUTPUT_DIR, "metrics.json")
+        self.path = path or os.path.join(DATA_DIR, "metrics.json")
         self.current_session: Dict[str, Any] = {}
         self.history: List[Dict] = []
         self._load()

@@ -14,5 +14,15 @@ server/
 server
 # Project specific
 .gemini/
-*.log
+sandbox/
+# Data - Persistent learning (optional to commit)
+data/
 
+# Sandbox - Test files
+sandbox/
+
+# Outputs - Ignore transient files but keep sessions
+outputs/debug_logs/
+outputs/benchmark_*.json
+outputs/vector_memory*/
+outputs/*.json

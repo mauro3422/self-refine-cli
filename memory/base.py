@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from config.settings import OUTPUT_DIR
+from config.settings import DATA_DIR
 from memory.vector_store import get_vector_memory, CHROMA_AVAILABLE
 from memory.cache import get_cache
 
@@ -22,7 +22,7 @@ class SmartMemory:
     DECAY_RATE = 0.98  # Daily decay multiplier
     
     def __init__(self, path: str = None):
-        self.path = path or os.path.join(OUTPUT_DIR, "agent_memory.json")
+        self.path = path or os.path.join(DATA_DIR, "agent_memory.json")
         self.memories: List[Dict[str, Any]] = []
         self.vector = get_vector_memory() if CHROMA_AVAILABLE else None
         self._graph = None  # Lazy load
@@ -57,6 +57,7 @@ class SmartMemory:
             json.dump({
                 "memories": self.memories,
                 "updated": datetime.now().isoformat(),
+                "last_decay": datetime.now().isoformat(),  # Track decay time
                 "count": len(self.memories)
             }, f, indent=2, ensure_ascii=False)
     
@@ -73,12 +74,31 @@ class SmartMemory:
                 # Apply decay based on age
                 original_importance = mem.get("base_importance", mem.get("importance", 5))
                 decay_factor = self.DECAY_RATE ** days_old
+                
+                # Also factor in success rate if we have enough data
+                success_rate = mem.get("success_rate", 1.0)
+                total_uses = mem.get("success_count", 0) + mem.get("fail_count", 0)
+                if total_uses >= 3:  # Only adjust if enough data
+                    decay_factor *= success_rate  # Low success = faster decay
+                
                 mem["importance"] = max(1, int(original_importance * decay_factor))
                 mem["decay_factor"] = round(decay_factor, 3)
                 modified = True
         
         if modified:
             self._save()
+    
+    def run_decay(self) -> dict:
+        """Public method to manually trigger decay (for periodic jobs)"""
+        before = sum(m.get("importance", 5) for m in self.memories)
+        self._apply_decay()
+        after = sum(m.get("importance", 5) for m in self.memories)
+        return {
+            "memories_processed": len(self.memories),
+            "total_importance_before": before,
+            "total_importance_after": after,
+            "decayed_by": before - after
+        }
     
     def add(self, lesson: str, category: str = "general", 
             keywords: List[str] = None, importance: int = 5,
@@ -145,9 +165,30 @@ class SmartMemory:
         return entry
     
     def _extract_keywords(self, text: str) -> List[str]:
-        words = text.lower().split()
-        stop_words = {"when", "always", "should", "must", "that", "this", "with", "from", "para", "usar"}
-        return [w for w in words if len(w) > 4 and w not in stop_words][:5]
+        """Extract semantic keywords using LLM for better quality"""
+        try:
+            from core.llm_client import LLMClient
+            llm = LLMClient()
+            
+            prompt = f"""Extract 3-5 semantic keywords from this lesson. Output ONLY comma-separated keywords, nothing else.
+
+LESSON: {text[:300]}
+
+KEYWORDS:"""
+            
+            response = llm.generate(prompt, temp=0.2)
+            # Parse comma-separated keywords
+            keywords = [k.strip().lower() for k in response.split(',') if k.strip()]
+            return keywords[:5] if keywords else self._fallback_keywords(text)
+        except:
+            return self._fallback_keywords(text)
+    
+    def _fallback_keywords(self, text: str) -> List[str]:
+        """Fallback heuristic keywords if LLM fails"""
+        clean_text = text.lower().replace('*', '').replace('#', '').replace('`', '')
+        words = clean_text.split()
+        stop_words = {"when", "always", "should", "must", "that", "this", "with", "from", "the", "and", "for"}
+        return [w.strip('.,;:()[]') for w in words if len(w) > 4 and w not in stop_words][:5]
     
     def _create_links(self, new_entry: Dict) -> None:
         """Create weighted links to related memories"""
@@ -330,7 +371,15 @@ class SmartMemory:
     def clear(self):
         self.memories = []
         self._save()
-        print("🧹 Memory cleared")
+        
+        # Also clear the graph to keep in sync
+        try:
+            graph = self.graph
+            graph.graph.clear()  # NetworkX graph clear
+            graph._save()
+            print("🧹 Memory and graph cleared")
+        except Exception as e:
+            print(f"🧹 Memory cleared (graph sync failed: {e})")
     
     def stats(self) -> Dict:
         total = len(self.memories)

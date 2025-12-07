@@ -96,7 +96,32 @@ openai
 requests
 ```
 
-## 📜 Based on
+## 📜 Architecture & Sources
 
-- [Self-Refine Paper](https://arxiv.org/abs/2303.17651)
-- [llama.cpp](https://github.com/ggerganov/llama.cpp)
+This project implements the **Poetiq Architecture** for autonomous AI reasoning:
+
+### Core Papers & Research
+- [Self-Refine Paper](https://arxiv.org/abs/2303.17651) - Iterative Refinement with Self-Feedback (Madaan et al., 2023)
+- [Ryan Greenblatt's ARC-AGI Approach](https://github.com/rgreenblatt/arc_prism) - Getting 50% on ARC-AGI with GPT-4o (Program Synthesis)
+
+### Poetiq Architecture (2025)
+- [Poetiq GitHub Repo](https://github.com/poetiq-ai/poetiq-arc-agi-solver) - Official code
+- [Poetiq Blog: Traversing the Frontier](https://poetiq.ai/posts/arcagi_announcement/) - Full technical breakdown
+- [Poetiq Blog: Shatters ARC-AGI-2](https://poetiq.ai/posts/arcagi_verified/) - Verified results
+
+### Key Concepts
+| Concept | Description |
+|---------|-------------|
+| **Program Synthesis** | LLM generates Python code, not just text answers |
+| **Test-Time Compute** | More inference time → better results (log-linear) |
+| **Verification Loop** | Execute code against examples, if fail → feedback → retry |
+| **Self-Auditing** | System decides when solution is satisfactory |
+| **Pareto-Optimal Routing** | Use cheap models for easy tasks, expensive for hard |
+
+### ARC-AGI Benchmark
+- [ARC Prize Official](https://arcprize.org/) - The benchmark that Poetiq conquered
+- [ARC-AGI-2 Leaderboard](https://arcprize.org/leaderboard)
+
+### llama.cpp
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) - Our local inference server
+

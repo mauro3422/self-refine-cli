@@ -68,11 +68,12 @@ class LightWorker:
 
 class SelfRefiner:
     """
-    Self-Refine loop with Memory Orchestrator integration:
+    Self-Refine loop with Memory Orchestrator integration + Poetiq Code Verification:
     1. FEEDBACK: Evaluate response
-    2. CHECK: If score >= threshold, stop
-    3. MEMORY: If low score, get more context from orchestrator
-    4. ITERATE: Refine with enhanced context
+    2. VERIFY: If code involved, test against examples (Poetiq-style)
+    3. CHECK: If score >= threshold AND code passes, stop
+    4. MEMORY: If low score, get more context from orchestrator
+    5. ITERATE: Refine with enhanced context (including verification errors)
     """
     
     def __init__(self, max_iterations: int = 2, score_threshold: int = 15, orchestrator=None):
@@ -80,38 +81,63 @@ class SelfRefiner:
         self.max_iterations = max_iterations
         self.score_threshold = score_threshold
         self.orchestrator = orchestrator  # For memory during refinement
-        self.registry = get_registry() # Access tools
+        self.registry = get_registry()  # Access tools
+        
+        # Poetiq-style code verification
+        from core.code_verifier import get_verifier
+        self.verifier = get_verifier()
     
-    def refine(self, response: str, task: str, tools_used: List[str], errors: List[str] = None) -> Dict[str, Any]:
-        """Run self-refine loop with memory-enhanced refinement"""
+    def refine(self, response: str, task: str, tools_used: List[str], 
+                errors: List[str] = None, test_cases: List[Dict] = None) -> Dict[str, Any]:
+        """
+        Run self-refine loop with memory-enhanced refinement.
+        If test_cases provided, also runs Poetiq-style code verification.
+        """
         current_response = response
         total_eval_time = 0
         total_refine_time = 0
+        verification_passed = False
         
         for i in range(self.max_iterations):
-            # Step 1: FEEDBACK
+            # Step 1: FEEDBACK (evaluate response quality)
             eval_start = time.time()
             score, feedback = self._evaluate(current_response, task, tools_used)
             eval_time = time.time() - eval_start
             total_eval_time += eval_time
             print(f"    Iter {i+1}: score={score}/25 (eval: {eval_time:.1f}s)")
             
-            # Step 2: CHECK stopping criteria
-            if score >= self.score_threshold:
-                print(f"    ✓ Score >= {self.score_threshold}, stopping")
+            # Step 2: VERIFY (Poetiq-style) - if test cases provided and code present
+            verify_feedback = ""
+            if test_cases and 'python_exec' in tools_used:
+                code = self._extract_code_from_response(current_response)
+                if code:
+                    verify_result = self.verifier.verify(code, test_cases)
+                    verification_passed = verify_result.passed
+                    print(f"    🧪 Verification: {verify_result.passed_tests}/{verify_result.total_tests} passed")
+                    if not verify_result.passed:
+                        verify_feedback = f"\n\nCODE VERIFICATION FAILED:\n{verify_result.to_feedback()}"
+            
+            # Step 3: CHECK stopping criteria
+            should_stop = score >= self.score_threshold
+            if test_cases and 'python_exec' in tools_used:
+                should_stop = should_stop and verification_passed
+            
+            if should_stop:
+                print(f"    ✓ Score >= {self.score_threshold} and verification passed, stopping")
                 return {
                     "response": current_response,
                     "score": score,
                     "iterations": i + 1,
                     "eval_time": total_eval_time,
-                    "refine_time": total_refine_time
+                    "refine_time": total_refine_time,
+                    "verification_passed": verification_passed
                 }
             
             if i == self.max_iterations - 1:
                 print(f"    ⚠ Max iterations reached")
                 break
             
-            # Step 3: Get additional memory context if score is low
+            # Step 4: Get additional memory context if score is low
             extra_context = ""
             if self.orchestrator and score < 12:
                 print(f"    🧠 Fetching memory for refinement...")
@@ -120,10 +146,11 @@ class SelfRefiner:
                 )
                 extra_context = refine_ctx.to_prompt()
             
-            # Step 4: ITERATE (refine with memory)
+            # Step 5: ITERATE (refine with memory + verification feedback)
             refine_start = time.time()
+            combined_feedback = feedback + verify_feedback
             current_response = self._refine_response(
-                current_response, task, feedback, tools_used, extra_context
+                current_response, task, combined_feedback, tools_used, extra_context
             )
             refine_time = time.time() - refine_start
             total_refine_time += refine_time
@@ -134,8 +161,26 @@ class SelfRefiner:
             "score": score,
             "iterations": self.max_iterations,
             "eval_time": total_eval_time,
-            "refine_time": total_refine_time
+            "refine_time": total_refine_time,
+            "verification_passed": verification_passed
         }
+    
+    def _extract_code_from_response(self, response: str) -> Optional[str]:
+        """Extract Python code from response for verification"""
+        import re
+        # Look for code in python_exec params or code blocks
+        patterns = [
+            r'"code"\s*:\s*"([^"]+)"',  # JSON format
+            r'```python\s*\n?(.*?)\n?```',  # Markdown code block
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, response, re.DOTALL)
+            if match:
+                code = match.group(1)
+                # Unescape if from JSON
+                code = code.replace('\\n', '\n').replace('\\"', '"')
+                return code
+        return None
     
     def _evaluate(self, response: str, task: str, tools_used: List[str]) -> tuple:
         """FEEDBACK phase: evaluate with multi-dimensional scoring"""
@@ -247,11 +292,12 @@ Output ONLY this format:
 
 
 class ToolExecutor:
-    """Executes tools from winning response"""
+    """Executes tools from winning response with granular tracking"""
     
     def __init__(self, working_memory=None):
         self.registry = get_registry()
         self.tools_used = []
+        self.tool_results = []  # NEW: Track individual results
         self.working_memory = working_memory
     
     def execute(self, tool_call: Dict) -> str:
@@ -263,6 +309,13 @@ class ToolExecutor:
         
         self.tools_used.append(tool_name)
         result = self.registry.execute_tool(tool_name, **params)
+        
+        # Track granular result
+        self.tool_results.append({
+            "tool": tool_name,
+            "success": result.get("success", False),
+            "error": result.get("error") if not result.get("success") else None
+        })
         
         # Re-index if we created/modified files
         if result.get("success") and tool_name == "write_file" and self.working_memory:
@@ -278,6 +331,17 @@ class ToolExecutor:
             return f"[OK] {tool_name}: {result.get('result', '')}"
         else:
             return f"[ERROR] {tool_name}: {result.get('error', 'Unknown')}"
+    
+    def get_success_rate(self) -> float:
+        """Calculate overall tool success rate"""
+        if not self.tool_results:
+            return 0.0
+        successes = sum(1 for r in self.tool_results if r["success"])
+        return successes / len(self.tool_results)
+    
+    def had_any_failure(self) -> bool:
+        """Check if any tool failed"""
+        return any(not r["success"] for r in self.tool_results)
 
 
 class PoetiqRunner:
@@ -292,6 +356,10 @@ class PoetiqRunner:
     
     def __init__(self, num_workers: int = 3, refine_threshold: int = 15):
         self.num_workers = num_workers
+        
+        # Ensure tools are registered (only runs once due to singleton registry)
+        self._ensure_tools_registered()
+        
         self.orchestrator = get_orchestrator()  # Unified memory system
         self.aggregator = Aggregator()
         self.executor = ToolExecutor(working_memory=self.orchestrator.working_memory)
@@ -308,6 +376,31 @@ class PoetiqRunner:
         except:
             pass
     
+    def _ensure_tools_registered(self):
+        """Register all tools (idempotent - only registers if not already present)"""
+        from tools.registry import get_registry
+        registry = get_registry()
+        
+        # Skip if already registered
+        if registry.list_tools():
+            return
+        
+        # Register all tool categories
+        from tools.file_tools import register_file_tools
+        from tools.command_tools import register_command_tools
+        from tools.search_tools import register_search_tools
+        from tools.code_tools import register_code_tools
+        from tools.edit_tools import register_edit_tools
+        from tools.verify_tools import register_verify_tools
+        
+        register_file_tools()
+        register_command_tools()
+        register_search_tools()
+        register_code_tools()
+        register_edit_tools()
+        register_verify_tools()
+        print("✅ All tools registered")
+    
     def run(self, task: str) -> Dict[str, Any]:
         """Run full Poetiq + Self-Refine pipeline"""
         start_time = time.time()
@@ -321,12 +414,12 @@ class PoetiqRunner:
         
         # Phase 1: Parallel generation
         print(f"\n📡 Phase 1: Parallel generation...")
-        responses = self._generate_parallel(task)
+        responses, memory_ids_used = self._generate_parallel(task)  # Unpack tuple
         
         # Log parallel
         logger.log_parallel(responses)
         
-        parallel_time = max(r.duration for r in responses)
+        parallel_time = max(r.duration for r in responses) if responses else 0
         print(f"  ⏱️ {parallel_time:.1f}s")
         
         # Phase 2: Aggregation (Synthesis)
@@ -375,22 +468,57 @@ class PoetiqRunner:
             print(f"\n📝 Phase 5: Final response...")
             final_response = self._generate_final(task, refined["response"], result_text)
         
-        # Phase 6: Learn from session
+        # Phase 6: Learn from session (async - runs in background)
         total_time = time.time() - start_time
         
         # Log final
         logger.log_final(final_response, refined['score'], total_time)
-        if refined["iterations"] > 1 or refined["score"] < 20:
-            print(f"\n💡 Phase 6: Learning from session...")
-            learner = MemoryLearner()
-            learner.learn_from_session(
-                task=task,
-                initial_score=10,  # Approximate
-                final_score=refined["score"],
-                iterations=refined["iterations"]
-            )
+        
+        # ALWAYS learn from every session - run in background thread
+        import threading
+        
+        def learn_async():
+            try:
+                learner = MemoryLearner()
+                
+                # Prepare workers data for richer learning
+                workers_data = [
+                    {
+                        "id": r.worker_id,
+                        "tool": r.tool_call.get("tool") if r.tool_call else None,
+                        "response": r.raw_response[:200] if r.raw_response else ""
+                    }
+                    for r in responses
+                ]
+                
+                result = learner.learn_from_session(
+                    task=task,
+                    initial_score=10,  # Approximate
+                    final_score=refined["score"],
+                    iterations=refined["iterations"],
+                    workers_data=workers_data
+                )
+                print(f"\n💡 Learning complete: {result.get('lessons_added', 0)} new, {result.get('lessons_evolved', 0)} evolved")
+            except Exception as e:
+                print(f"\n⚠️ Learning error: {e}")
+        
+        # Start learning in background (non-daemon so it completes before exit)
+        learn_thread = threading.Thread(target=learn_async, daemon=False)
+        learn_thread.start()
+        print(f"\n💡 Phase 6: Learning in background...")
         
         print(f"\n⏱️ Total time: {total_time:.1f}s")
+        
+        # Phase 7: Memory Feedback Loop (IMPROVED - uses tool success)
+        # Mark used memories as success/failure based on BOTH score AND tool results
+        if memory_ids_used:
+            score_ok = refined["score"] >= 15
+            tools_ok = not self.executor.had_any_failure() if self.executor.tool_results else True
+            task_success = score_ok and tools_ok
+            self.orchestrator.mark_memories_feedback(memory_ids_used, task_success)
+            
+            if not task_success:
+                print(f"    ⚠️ Memory feedback: FAIL (score_ok={score_ok}, tools_ok={tools_ok})")
         
         return {
             "response": final_response,
@@ -403,13 +531,15 @@ class PoetiqRunner:
             "total_time": total_time
         }
     
-    def _generate_parallel(self, task: str) -> List[WorkerResponse]:
+    def _generate_parallel(self, task: str) -> tuple:
+        """Returns (responses, memory_ids) tuple"""
         temps = [0.5, 0.7, 0.9]
         responses = []
         
         # Get unified context from orchestrator ONCE
         context = self.orchestrator.get_context(task, use_llm=False)  # Fast mode
         memory_context = context.to_prompt()
+        memory_ids = context.memory_ids or []  # Track which memories we used
         
         with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
             futures = {}
@@ -428,7 +558,7 @@ class PoetiqRunner:
                 except Exception as e:
                     print(f"  Worker-{wid}: ERROR - {e}")
         
-        return responses
+        return responses, memory_ids  # Return both
     
     def _generate_final(self, task: str, response: str, tool_result: str) -> str:
         prompt = f"""Task: {task}

@@ -15,56 +15,79 @@ class MemoryEvolution:
         self.llm = LLMClient()
     
     def should_evolve(self, new_memory: str, old_memory: Dict) -> bool:
-        """Determine if old memory should be updated based on new info"""
-        # Simple heuristics:
-        # 1. Same category
-        # 2. Contradictory info
-        # 3. More specific version
-        
+        """Use LLM to determine if memories are related and should evolve"""
         old_text = old_memory.get("lesson", "")
         
-        # Check for contradiction keywords
-        contradiction_words = ["instead", "actually", "wrong", "correct", "fix"]
-        has_contradiction = any(w in new_memory.lower() for w in contradiction_words)
-        
-        # Check for same topic (word overlap)
+        # Quick heuristic pre-check (avoid LLM call if clearly unrelated)
         new_words = set(new_memory.lower().split())
         old_words = set(old_text.lower().split())
         overlap = len(new_words & old_words)
         
-        return has_contradiction or overlap > 5
+        if overlap < 3:  # Too different, skip LLM
+            return False
+        
+        # Use LLM for semantic check
+        try:
+            prompt = f"""Are these two lessons about the SAME topic and should be merged?
+OLD: {old_text[:200]}
+NEW: {new_memory[:200]}
+
+Answer ONLY: YES or NO"""
+            response = self.llm.generate(prompt, temp=0.1)
+            return "YES" in response.upper()
+        except:
+            return overlap > 5  # Fallback to heuristic
     
     def evolve_memory(self, old_memory: Dict, new_memory: str) -> Dict:
         """
-        Evolve an old memory by merging with new info.
-        Returns updated memory dict.
+        Evolve memory with LLM-based contradiction detection.
+        Either MERGE (combine info) or REPLACE (if contradicts).
         """
         old_text = old_memory.get("lesson", "")
         
-        # Use LLM to merge memories
-        prompt = f"""Merge these two related memories into one improved version:
+        # First, detect if there's a contradiction
+        try:
+            detect_prompt = f"""Do these lessons CONTRADICT each other?
+OLD: {old_text}
+NEW: {new_memory}
+
+Answer: CONTRADICT or COMPATIBLE"""
+            detect_response = self.llm.generate(detect_prompt, temp=0.1)
+            is_contradiction = "CONTRADICT" in detect_response.upper()
+        except:
+            is_contradiction = False
+        
+        if is_contradiction:
+            # If contradiction, NEW wins (more recent = more correct)
+            return {
+                "lesson": new_memory.strip(),
+                "category": old_memory.get("category", "general"),
+                "keywords": old_memory.get("keywords", []),
+                "time": datetime.now().isoformat(),
+                "evolved_from": f"[REPLACED] {old_text[:30]}...",
+                "evolution_count": old_memory.get("evolution_count", 0) + 1
+            }
+        
+        # Otherwise, merge them intelligently
+        merge_prompt = f"""Merge these two related lessons into ONE concise rule.
+Keep the most specific and actionable information.
 
 OLD: {old_text}
 NEW: {new_memory}
 
-Write a single, improved lesson that combines both.
-Be concise (1-2 sentences max).
+MERGED (1-2 sentences only):"""
 
-MERGED:"""
-
-        merged = self.llm.generate(prompt, temp=0.3)
-        
-        # Clean up response
+        merged = self.llm.generate(merge_prompt, temp=0.3)
         merged = merged.strip()
-        if merged.startswith("MERGED:"):
-            merged = merged[7:].strip()
+        if merged.startswith("MERGED"):
+            merged = merged.split(":", 1)[-1].strip()
         
         return {
-            "lesson": merged[:200],  # Max length
+            "lesson": merged,
             "category": old_memory.get("category", "general"),
             "keywords": old_memory.get("keywords", []),
             "time": datetime.now().isoformat(),
-            "evolved_from": old_text[:50],
+            "evolved_from": f"[MERGED] {old_text[:30]}...",
             "evolution_count": old_memory.get("evolution_count", 0) + 1
         }
     

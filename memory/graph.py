@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import json
 import os
-from config.settings import OUTPUT_DIR
+from config.settings import DATA_DIR
 
 
 class MemoryGraph:
@@ -16,7 +16,7 @@ class MemoryGraph:
     """
     
     def __init__(self, path: str = None):
-        self.path = path or os.path.join(OUTPUT_DIR, "memory_graph.json")
+        self.path = path or os.path.join(DATA_DIR, "memory_graph.json")
         self.graph = nx.DiGraph()  # Directed graph for relationships
         self._load()
     
@@ -134,11 +134,16 @@ class MemoryGraph:
         }
 
 
+import threading
+
 # Global instance
 _graph: Optional[MemoryGraph] = None
+_graph_lock = threading.Lock()
 
 def get_memory_graph() -> MemoryGraph:
     global _graph
     if _graph is None:
-        _graph = MemoryGraph()
+        with _graph_lock:
+            if _graph is None:
+                _graph = MemoryGraph()
     return _graph

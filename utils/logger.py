@@ -11,6 +11,8 @@ from config.settings import OUTPUT_DIR
 class PoetiqLogger:
     """Logs all Poetiq session activity for analysis"""
     
+    MAX_SESSIONS = 10  # Keep only last 10 sessions
+    
     def __init__(self):
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_dir = os.path.join(OUTPUT_DIR, "sessions")
@@ -18,7 +20,24 @@ class PoetiqLogger:
         self.log_path = os.path.join(self.log_dir, f"session_{self.session_id}.json")
         self.events: List[Dict] = []
         self.task = ""
+        self._cleanup_old_sessions()  # Clean old sessions
         self._save()  # Create file immediately
+    
+    def _cleanup_old_sessions(self):
+        """Keep only the last MAX_SESSIONS session files"""
+        try:
+            files = glob.glob(os.path.join(self.log_dir, "session_*.json"))
+            if len(files) > self.MAX_SESSIONS:
+                # Sort by creation time, oldest first
+                files.sort(key=os.path.getctime)
+                # Delete oldest files
+                for f in files[:-self.MAX_SESSIONS]:
+                    try:
+                        os.remove(f)
+                    except:
+                        pass
+        except:
+            pass
     
     def set_task(self, task: str):
         self.task = task

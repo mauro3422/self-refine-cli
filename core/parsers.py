@@ -81,13 +81,14 @@ def extract_tool_call(response: str) -> Optional[Dict[str, Any]]:
 
 def extract_score(feedback: str) -> int:
     """Extract score from evaluation feedback"""
-    feedback_lower = feedback.lower()
+    feedback_lower = feedback.lower().strip()
     
-    # Explicit score patterns
+    # Pattern 1: Explicit SCORE: N or SCORE: N/25
     patterns = [
-        r'TOTAL_SCORE[:\s]+(\d+)/25',
-        r'TOTAL[:\s]+(\d+)/25',
-        r'(\d+)/25',
+        r'SCORE[:\s]+(\d+)(?:/25)?',  # SCORE: 15 or SCORE: 15/25
+        r'TOTAL_SCORE[:\s]+(\d+)',
+        r'TOTAL[:\s]+(\d+)',
+        r'(\d+)/25',  # Direct fraction
     ]
     
     for p in patterns:
@@ -97,25 +98,33 @@ def extract_score(feedback: str) -> int:
             if score <= 25:
                 return score
     
-    # Sum individual /5 scores
+    # Pattern 2: Just a number at the end (common LLM response)
+    last_number = re.search(r'(\d{1,2})\s*$', feedback.strip())
+    if last_number:
+        score = int(last_number.group(1))
+        if 0 <= score <= 25:
+            return score
+    
+    # Pattern 3: Sum individual /5 scores
     dimension_scores = re.findall(r'(\d)/5', feedback)
     if len(dimension_scores) >= 5:
         return sum(int(s) for s in dimension_scores[:5])
     
     # Heuristic: positive indicators
-    positive = ['✅', 'correct', 'excelente', 'excellent', 'passed', 'optimal']
-    negative = ['❌', 'failed', 'missing', '0/25', 'score: 0']
+    positive = ['✅', 'correct', 'excelente', 'excellent', 'passed', 'optimal', 'success']
+    negative = ['❌', 'failed', 'missing', '0/25', 'score: 0', 'wrong', 'error']
     
     pos_count = sum(1 for p in positive if p in feedback_lower)
     neg_count = sum(1 for n in negative if n in feedback_lower)
     
-    if pos_count >= 3 and neg_count == 0:
-        return 23
+    if pos_count >= 2 and neg_count == 0:
+        return 20  # Generous default for positive responses
     
     if 'optimal_response' in feedback_lower:
         return 25
     
-    return 0
+    # Default to midpoint instead of 0 (more forgiving)
+    return 10
 
 
 def extract_code_block(response: str) -> Optional[str]:

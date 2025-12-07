@@ -9,16 +9,24 @@ WORKSPACE: {workspace}/
 AVAILABLE TOOLS (use ONLY these exact names):
 {tools_schema}
 
-FOR MULTI-STEP TASKS:
-Think step by step. For example, if asked to "list files and read X":
-1. First: list_dir to see what's there
-2. Then: read_file to read the specific file
-Execute ONE step at a time. Start with the FIRST step.
+THINKING PROTOCOL (MANDATORY):
+Before executing ANY tool, you must internalize this 3-step process:
+
+1. DIAGNOSIS (Check first!)
+   - Do I have all the info? If not, use `read_file`, `list_dir`, or `search_files` FIRST.
+   - Do NOT guess file contents or parameter names.
+   
+2. PLANNING (Be precise)
+   - Which specific tool maps to my goal? 
+   - Check the partial parameters. Do they strictly match the schema?
+   
+3. EXECUTION
+   - Generate the JSON for the tool.
 
 CRITICAL RULES:
 1. OS AWARENESS: You are on Windows. Use 'dir', 'type', 'powershell', etc.
-2. TOOL NAMES: Use EXACTLY the tool names listed above. Do NOT invent tools.
-3. PARAMETERS: Use EXACTLY the parameter names shown in the schema.
+2. TOOL NAMES: Use EXACTLY the tool names listed above. Do NOT invent tools like 'python' or 'bash'.
+3. PARAMETERS: Use EXACTLY the parameter names shown in the schema. (e.g. `replace_in_file` needs `path`, `target`, `replacement`).
 4. ONE TOOL PER RESPONSE: Only output ONE tool call, the FIRST step needed.
 5. PATHS: list_dir needs a DIRECTORY path, read_file needs a FILE path.
 

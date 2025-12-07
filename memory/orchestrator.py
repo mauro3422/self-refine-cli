@@ -9,6 +9,9 @@ from memory.llm_linker import get_llm_linker, LLMLinker
 from memory.graph import get_memory_graph
 from memory.working_memory import get_working_memory, WorkingMemory
 
+# Debug flag - set to True to see memory retrieval details
+DEBUG_MEMORY = True
+
 
 @dataclass
 class MemoryContext:
@@ -18,14 +21,15 @@ class MemoryContext:
     tools_suggested: List[str] # Tools likely needed
     tips: str                  # ICV tips
     project_files: List[Dict] = None # Relevant project files (new)
+    memory_ids: List[int] = None     # IDs of memories used (for feedback loop)
     
     def to_prompt(self) -> str:
         """Convert to prompt string for LLM"""
         parts = []
         
-        # Memory lessons
+        # Memory lessons (use full content, no truncation)
         if self.memories:
-            lessons = "\n".join([f"- {m.get('lesson', '')[:100]}" for m in self.memories])
+            lessons = "\n".join([f"- {m.get('lesson', '')}" for m in self.memories])
             parts.append(f"RELEVANT LESSONS:\n{lessons}")
         
         # Category and tools
@@ -83,12 +87,25 @@ class MemoryOrchestrator:
         # 5. Get project context (NEW)
         project_files = self.working_memory.search_project(query)
         
+        # DEBUG: Log what we retrieved
+        if DEBUG_MEMORY:
+            print(f"\n📚 MEMORY RETRIEVAL for: {query[:60]}...")
+            print(f"   Category: {category} (confidence: {confidence:.2f})")
+            print(f"   Tools suggested: {tools}")
+            if memories:
+                print(f"   Memories ({len(memories)}):")
+                for m in memories:
+                    print(f"      - [{m.get('category', '?')}] {m.get('lesson', '')[:60]}...")
+            else:
+                print(f"   Memories: (none found)")
+        
         return MemoryContext(
             memories=memories,
             category=category,
             tools_suggested=tools,
             tips=tips,
-            project_files=project_files
+            project_files=project_files,
+            memory_ids=[m.get('id') for m in memories if m.get('id') is not None]
         )
     
     def get_refine_context(self, query: str, current_response: str,
@@ -177,6 +194,24 @@ class MemoryOrchestrator:
             self.memory._save()
         
         return entry
+    
+    def mark_memories_feedback(self, memory_ids: List[int], success: bool) -> None:
+        """
+        Mark memories as helpful or unhelpful based on task outcome.
+        Called after task completion to strengthen/weaken memories.
+        """
+        if not memory_ids:
+            return
+        
+        for mem_id in memory_ids:
+            if success:
+                self.memory.mark_success(mem_id)
+            else:
+                self.memory.mark_failure(mem_id)
+        
+        if DEBUG_MEMORY:
+            status = "✅ SUCCESS" if success else "❌ FAILURE"
+            print(f"\n📊 MEMORY FEEDBACK: {status} for memories {memory_ids}")
     
     def stats(self) -> Dict:
         self.memory.reload()  # Sync with other processes
