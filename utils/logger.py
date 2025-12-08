@@ -53,7 +53,7 @@ class PoetiqLogger:
         self._save()
     
     def log_parallel(self, responses):
-        """Log parallel worker responses"""
+        """Log parallel worker responses - includes True Poetiq verification status"""
         self.events.append({
             "phase": "parallel",
             "time": datetime.now().isoformat(),
@@ -62,6 +62,9 @@ class PoetiqLogger:
                     "id": r.worker_id,
                     "duration": round(r.duration, 1),
                     "tool": r.tool_call.get("tool") if r.tool_call else None,
+                    "verified": getattr(r, 'verified', False),  # True Poetiq field
+                    "attempts": getattr(r, 'attempts', 1),  # How many retries
+                    "execution_result": getattr(r, 'execution_result', '')[:100],  # Exec result
                     "response": r.raw_response[:400]
                 }
                 for r in responses
@@ -79,15 +82,36 @@ class PoetiqLogger:
         })
         self._save()
     
-    def log_refine(self, iteration: int, score: int, feedback: str):
-        """Log self-refine iteration"""
+    def log_extraction(self, hallucinated_tool: str, code_length: int, source: str):
+        """Log code extraction when tool was hallucinated"""
         self.events.append({
+            "phase": "extraction",
+            "time": datetime.now().isoformat(),
+            "hallucinated_tool": hallucinated_tool,
+            "code_length": code_length,
+            "source": source  # "worker", "synthesized", or "placeholder"
+        })
+        self._save()
+    
+    def log_refine(self, iteration: int, score: int, feedback: str, 
+                   pre_score: int = None, verified_workers: int = None, total_workers: int = None):
+        """Log self-refine iteration with score comparison for True Poetiq analysis"""
+        event = {
             "phase": "refine",
             "time": datetime.now().isoformat(),
             "iteration": iteration,
             "score": score,
             "feedback": feedback[:400]
-        })
+        }
+        # True Poetiq tracking fields
+        if pre_score is not None:
+            event["pre_refine_score"] = pre_score
+            event["score_delta"] = score - pre_score  # Positive = improvement
+        if verified_workers is not None:
+            event["verified_workers"] = verified_workers
+            event["total_workers"] = total_workers
+        
+        self.events.append(event)
         self._save()
     
     def log_tool(self, tool_name: str, result: str):

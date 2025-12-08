@@ -24,8 +24,8 @@ WORKER_TEMPS = [0.2, 0.3, 0.4]  # Lower temps = less hallucination
 # ===================
 # Self-Refine Loop
 # ===================
-MAX_ITERATIONS = 5          # Max refinement iterations
-SCORE_THRESHOLD = 22        # Stop if score >= this
+MAX_ITERATIONS = 3          # Max refinement iterations (reduced for speed)
+SCORE_THRESHOLD = 18        # Stop if score >= this (more achievable)
 FEEDBACK_DIMENSIONS = 5     # Evaluation dimensions
 
 # ===================

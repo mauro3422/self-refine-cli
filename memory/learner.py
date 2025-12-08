@@ -29,10 +29,16 @@ class MemoryLearner:
         """
         Analyze a session and extract lessons with rich metadata.
         Now accepts workers_data for richer learning context.
+        NEW: Also learns success patterns from verified workers.
         """
         # Determine if session was successful
         success = final_score >= 18 and iterations <= 2
         improved = final_score > initial_score
+        
+        # NEW: Learn from verified workers (success patterns)
+        success_patterns = []
+        if workers_data:
+            success_patterns = self._learn_success_patterns(task, workers_data)
         
         # Build analysis prompt with workers data
         prompt = self._build_analysis_prompt(
@@ -44,6 +50,9 @@ class MemoryLearner:
         
         # Extract structured lessons
         lessons = self._extract_lessons(response)
+        
+        # Add success patterns as lessons too
+        lessons.extend(success_patterns)
         
         # Determine metadata for each lesson
         tools_used = list(tool_results.keys()) if tool_results else []
@@ -62,6 +71,10 @@ class MemoryLearner:
         evolution = get_evolution()
         
         for lesson in lessons:
+            # Determine if this is a success pattern (higher importance for these!)
+            is_success_pattern = lesson.startswith("PATTERN:")
+            lesson_importance = 6 if is_success_pattern else base_importance
+            
             # NEW: Check for memories that should evolve
             candidates = evolution.get_evolution_candidates(lesson, self.memory.memories)
             for old_mem in candidates:
@@ -73,11 +86,15 @@ class MemoryLearner:
             
             # Add new memory if no evolution happened
             if not candidates:
+                # Better category for success patterns
+                category = "code_pattern" if is_success_pattern else self._detect_category(lesson, tools_used)
+                source = "verified_success" if is_success_pattern else ("refinement" if improved else "failure")
+                
                 entry = self.memory.add(
                     lesson=lesson,
-                    category=self._detect_category(lesson, tools_used),
-                    importance=base_importance,
-                    source_type="refinement" if improved else "failure",
+                    category=category,
+                    importance=lesson_importance,
+                    source_type=source,
                     tools_involved=tools_used,
                     error_type=error_types[0] if error_types else None
                 )
@@ -90,9 +107,75 @@ class MemoryLearner:
         return {
             "lessons_added": len(added),
             "lessons_evolved": len(evolved),
+            "success_patterns": len(success_patterns),
             "success": success,
             "importance": base_importance
         }
+    
+    def _learn_success_patterns(self, task: str, workers_data: List[Dict]) -> List[str]:
+        """
+        NEW: Extract success patterns from verified workers.
+        When a worker's code was verified (executed successfully), we learn what worked.
+        """
+        verified_workers = [w for w in workers_data if w.get('verified', False)]
+        
+        if not verified_workers:
+            return []
+        
+        # Get the best verified worker (first attempt = cleanest solution)
+        best = min(verified_workers, key=lambda w: w.get('attempts', 1))
+        response_preview = best.get('response', '')[:300]
+        tool_used = best.get('tool', 'python_exec')
+        
+        # Extract pattern using LLM
+        prompt = f"""Extract a SUCCESS PATTERN from this verified code.
+
+TASK: {task[:100]}
+TOOL: {tool_used}
+WORKING CODE:
+{response_preview}
+
+Output ONE generalized pattern that worked. Format:
+PATTERN: For [task type], use [approach] with [key_technique]
+
+RULES:
+- Generalize! Don't use specific names, use [function], [variable], [file]
+- Focus on the APPROACH that made it work
+- Keep it under 100 chars
+
+PATTERN:"""
+        
+        try:
+            pattern = self.llm.generate(prompt, temp=0.2)
+            pattern = pattern.strip()
+            
+            # DEBUG: Log what LLM returned
+            print(f"  [DEBUG] Pattern LLM raw ({len(pattern)} chars): {pattern[:60]}...")
+            
+            # Clean up the pattern - extract first line/sentence only
+            if '\n' in pattern:
+                pattern = pattern.split('\n')[0].strip()
+            if '. ' in pattern and len(pattern) > 150:
+                pattern = pattern.split('. ')[0] + '.'
+            
+            # Clean up the pattern
+            if not pattern.startswith("PATTERN:"):
+                pattern = f"PATTERN: {pattern}"
+            
+            # Truncate if too long
+            if len(pattern) > 150:
+                pattern = pattern[:147] + "..."
+            
+            # Validate length (now more lenient)
+            if len(pattern) > 20:
+                print(f"  ✨ Success pattern: {pattern[:60]}...")
+                return [pattern]
+            else:
+                print(f"  [DEBUG] Pattern rejected: too short ({len(pattern)} chars)")
+        except Exception as e:
+            print(f"  [DEBUG] Pattern extraction error: {e}")
+        
+        return []
     
     def _build_analysis_prompt(self, task, initial, final, iterations, tools, errors, workers_data=None):
         """Build a strict, concise prompt that generates actionable rules"""
