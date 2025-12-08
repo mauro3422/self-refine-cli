@@ -15,7 +15,7 @@ from utils.logger import new_session
 from utils.metrics import get_metrics
 from memory.orchestrator import get_orchestrator, get_memory_context
 from memory.learner import MemoryLearner
-from config.settings import MAX_ITERATIONS, SCORE_THRESHOLD
+from config.settings import MAX_ITERATIONS, SCORE_THRESHOLD, WORKER_TEMPS, TEMPERATURE, TEMPERATURE_FEEDBACK
 
 
 @dataclass
@@ -92,16 +92,26 @@ class SelfRefiner:
         """
         Run self-refine loop with memory-enhanced refinement.
         If test_cases provided, also runs Poetiq-style code verification.
+        
+        NEW: Tracks best response across all iterations and returns the highest-scoring one,
+        not just the last iteration. This prevents regression where iter5 scores 0 but iter3 had 18.
         """
         current_response = response
         total_eval_time = 0
         total_refine_time = 0
         verification_passed = False
         
+        # NEW: Track best response across iterations
+        best_response = response
+        best_score = 0
+        best_iteration = 0
+        best_verification_passed = False
+        
         for i in range(self.max_iterations):
-            # Step 1: FEEDBACK (evaluate response quality)
+            # Step 1: FEEDBACK (evaluate response quality) - NOW PARALLEL!
             eval_start = time.time()
-            score, feedback = self._evaluate(current_response, task, tools_used)
+            print(f"    📊 Parallel evaluation (3 workers)...")
+            score, feedback = self._parallel_evaluate(current_response, task, tools_used)
             eval_time = time.time() - eval_start
             total_eval_time += eval_time
             print(f"    Iter {i+1}: score={score}/25 (eval: {eval_time:.1f}s)")
@@ -117,6 +127,15 @@ class SelfRefiner:
                     print(f"    🧪 Verification: {verify_result.passed_tests}/{verify_result.total_tests} passed")
                     if not verify_result.passed:
                         verify_feedback = f"\n\nCODE VERIFICATION FAILED:\n{verify_result.to_feedback()}"
+            
+            # NEW: Track best response (prioritize score, then verification)
+            is_better = score > best_score or (score == best_score and verification_passed and not best_verification_passed)
+            if is_better:
+                best_response = current_response
+                best_score = score
+                best_iteration = i + 1
+                best_verification_passed = verification_passed
+                print(f"    📈 New best: score={best_score}/25 at iter {best_iteration}")
             
             # Step 3: CHECK stopping criteria
             should_stop = score >= self.score_threshold
@@ -147,24 +166,29 @@ class SelfRefiner:
                 )
                 extra_context = refine_ctx.to_prompt()
             
-            # Step 5: ITERATE (refine with memory + verification feedback)
+            # Step 5: ITERATE (refine with memory + verification feedback) - NOW PARALLEL!
             refine_start = time.time()
             combined_feedback = feedback + verify_feedback
-            current_response = self._refine_response(
+            print(f"    🔄 Parallel refine (3 workers)...")
+            current_response = self._parallel_refine(
                 current_response, task, combined_feedback, tools_used, extra_context
             )
             refine_time = time.time() - refine_start
             total_refine_time += refine_time
-            print(f"    → Refined ({refine_time:.1f}s)")
+            print(f"    → Parallel refined ({refine_time:.1f}s)")
         
+        # NEW: Return BEST response, not last response
+        print(f"    🏆 Returning best response from iter {best_iteration} (score={best_score}/25)")
         return {
-            "response": current_response,
-            "score": score,
+            "response": best_response,  # Changed from current_response
+            "score": best_score,         # Changed from score
             "iterations": self.max_iterations,
             "eval_time": total_eval_time,
             "refine_time": total_refine_time,
-            "verification_passed": verification_passed
+            "verification_passed": best_verification_passed,  # Changed
+            "best_iteration": best_iteration  # NEW: Track which iter was best
         }
+
     
     def _extract_code_from_response(self, response: str) -> Optional[str]:
         """Extract Python code from response for verification"""
@@ -184,7 +208,7 @@ class SelfRefiner:
         return None
     
     def _evaluate(self, response: str, task: str, tools_used: List[str]) -> tuple:
-        """FEEDBACK phase: evaluate with multi-dimensional scoring"""
+        """FEEDBACK phase: evaluate with multi-dimensional scoring (single worker - fallback)"""
         tools_str = ", ".join(tools_used) if tools_used else "None"
         
         eval_prompt = EVAL_PROMPT.format(
@@ -198,9 +222,67 @@ class SelfRefiner:
         
         return score, feedback
     
+    def _parallel_evaluate(self, response: str, task: str, tools_used: List[str], 
+                           num_workers: int = 3) -> tuple:
+        """
+        PARALLEL FEEDBACK: Use multiple evaluators for more robust scoring.
+        Returns median score and combined feedback for diversity.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from statistics import median
+        
+        tools_str = ", ".join(tools_used) if tools_used else "None"
+        
+        eval_prompt = EVAL_PROMPT.format(
+            user_input=task,
+            tools_used=tools_str,
+            response=response[:1000]
+        )
+        
+        # Different temps for diversity in evaluation
+        temps = [0.2, 0.3, 0.4][:num_workers]
+        
+        def eval_worker(worker_id: int, temp: float) -> tuple:
+            """Single evaluation worker"""
+            llm = LLMClient()
+            feedback = llm.chat([{"role": "user", "content": eval_prompt}], temp=temp)
+            score = self._extract_score(feedback)
+            return worker_id, score, feedback
+        
+        # Launch evaluators in parallel
+        results = []
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            futures = {
+                executor.submit(eval_worker, i, temps[i]): i 
+                for i in range(num_workers)
+            }
+            for future in as_completed(futures):
+                try:
+                    worker_id, score, feedback = future.result(timeout=60)
+                    results.append((worker_id, score, feedback))
+                    print(f"      Eval-{worker_id}: {score}/25 (temp={temps[worker_id]})")
+                except Exception as e:
+                    print(f"      ⚠️ Eval worker failed: {e}")
+        
+        if not results:
+            # Fallback to single evaluator
+            return self._evaluate(response, task, tools_used)
+        
+        # Calculate median score (robust against outliers)
+        scores = [r[1] for r in results]
+        final_score = int(median(scores))
+        
+        # Use feedback from worker with score closest to median
+        best_result = min(results, key=lambda r: abs(r[1] - final_score))
+        best_feedback = best_result[2]
+        
+        print(f"      → Median score: {final_score}/25 (from {len(results)} evals)")
+        
+        return final_score, best_feedback
+    
     def _refine_response(self, response: str, task: str, feedback: str, 
                           tools_used: List[str], extra_context: str = "") -> str:
-        """ITERATE phase: refine based on feedback + memory context"""
+        """ITERATE phase: refine based on feedback + memory context (single worker)"""
         tools_str = ", ".join(tools_used) if tools_used else "None"
         tools_schema = self.registry.get_tools_prompt()
         
@@ -218,6 +300,79 @@ class SelfRefiner:
         refined = self.llm.chat([{"role": "user", "content": refine_prompt}], temp=0.7)
         return refined
     
+    def _parallel_refine(self, response: str, task: str, feedback: str,
+                         tools_used: List[str], extra_context: str = "", num_workers: int = 3) -> str:
+        """
+        PARALLEL ITERATE: Launch multiple workers to refine in parallel,
+        then aggregate the best response. More diverse refinement.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        tools_str = ", ".join(tools_used) if tools_used else "None"
+        tools_schema = self.registry.get_tools_prompt()
+        
+        # Build the refine prompt (same for all workers)
+        refine_prompt = REFINE_PROMPT.format(
+            user_input=task,
+            tools_used=tools_str,
+            tools_schema=tools_schema,
+            feedback=feedback[:800]
+        )
+        
+        if extra_context:
+            refine_prompt = f"{extra_context}\n\n{refine_prompt}"
+        
+        # Workers with different temperatures for diversity
+        temps = WORKER_TEMPS[:num_workers] if len(WORKER_TEMPS) >= num_workers else [0.5, 0.7, 0.9][:num_workers]
+        
+        def refine_worker(worker_id: int, temp: float) -> WorkerResponse:
+            """Single refine worker"""
+            start = time.time()
+            llm = LLMClient()
+            refined = llm.chat([{"role": "user", "content": refine_prompt}], temp=temp)
+            tool_call = extract_tool_call(refined)
+            return WorkerResponse(
+                worker_id=worker_id,
+                raw_response=refined,
+                tool_call=tool_call,
+                duration=time.time() - start,
+                temperature=temp
+            )
+        
+        # Launch workers in parallel
+        responses = []
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            futures = {
+                executor.submit(refine_worker, i, temps[i]): i 
+                for i in range(num_workers)
+            }
+            for future in as_completed(futures):
+                try:
+                    resp = future.result(timeout=120)
+                    responses.append(resp)
+                except Exception as e:
+                    print(f"      ⚠️ Refine worker failed: {e}")
+        
+        if not responses:
+            # Fallback to single refine if all workers failed
+            return self._refine_response(response, task, feedback, tools_used, extra_context)
+        
+        # Print worker stats
+        for r in responses:
+            print(f"      Worker-{r.worker_id}: {r.duration:.1f}s (temp={r.temperature})")
+        
+        if len(responses) == 1:
+            return responses[0].raw_response
+        
+        # Aggregate: Pick the best response (simple scoring by tool presence + length)
+        best = max(responses, key=lambda r: (
+            1 if r.tool_call else 0,  # Prefer responses with valid tool calls
+            len(r.raw_response)       # Tiebreaker: longer = more detail
+        ))
+        
+        print(f"      → Selected Worker-{best.worker_id}")
+        return best.raw_response
+    
     def _extract_score(self, text: str) -> int:
         """Extract score from evaluation text"""
         patterns = [
@@ -230,6 +385,41 @@ class SelfRefiner:
             if match:
                 return min(25, int(match.group(1)))
         return 0
+        
+    def generate_test_cases(self, task: str, response: str) -> List[Dict]:
+        """Generate test cases for code verification"""
+        # Only verify if code is detected
+        if "```python" not in response and '"code":' not in response:
+            return []
+            
+        prompt = f"""Generate 3 test cases to verify the python code for this task.
+        
+TASK: {task}
+RESPONSE: {response[:800]}
+
+Return a JSON list of test cases.
+FORMAT:
+```json
+[
+  {{"input": "input_value", "expected": "expected_output"}},
+  ...
+]
+```
+If the task is about side effects (files, printing) or unclear, return `[]`.
+"""
+        try:
+            txt = self.llm.generate(prompt, temp=0.3)
+            # Simple extraction
+            import json
+            match = re.search(r'\[.*\]', txt, re.DOTALL)
+            if match:
+                cases = json.loads(match.group(0))
+                if isinstance(cases, list):
+                    return cases[:3]
+        except:
+            pass
+        return []
+
 
 
 class Aggregator:
@@ -255,32 +445,56 @@ class Aggregator:
         for i, r in enumerate(responses):
             tool_status = f"(Tool: {r.tool_call.get('tool')})" if r.tool_call else "(No tool)"
             candidates_text += f"\n--- CANDIDATE {i+1} {tool_status} ---\n{r.raw_response[:800]}\n"
+        
+        # Get list of VALID tools
+        from tools.registry import get_registry
+        registry = get_registry()
+        valid_tools = list(registry._tools.keys())
+        tools_list = ", ".join(valid_tools)
             
-        prompt = f"""Synthesize the best tool call from these candidates.
+        prompt = f"""Select or synthesize the best tool call from these candidates.
 
 TASK: {task}
+
+VALID TOOLS (use ONLY these exact names):
+{tools_list}
 
 CANDIDATES:
 {candidates_text}
 
-INSTRUCTIONS:
-1. Pick the candidate with the best tool and parameters.
-2. Output ONLY the JSON tool call, nothing else.
-3. Do NOT add explanations before or after the JSON.
+CRITICAL RULES:
+1. The "tool" field MUST be one of: {tools_list}
+2. Do NOT use module names like 're', 'ast', 'json' as tools - these are NOT valid.
+3. If candidates show Python code, use "python_exec" with the code.
+4. If candidates show file creation, use "write_file" with path and content.
+5. Output ONLY the JSON, no explanations.
 
-Output ONLY this format:
+Output EXACTLY this format:
 ```json
-{{"tool": "tool_name", "params": {{...}}}}
+{{"tool": "valid_tool_name", "params": {{...}}}}
 ```"""
 
         # Generate synthesized response
         print(f"    → Synthesizing {len(responses)} candidates...")
         agg_start = time.time()
-        synthesized_text = self.llm.generate(prompt, temp=0.5)
+        synthesized_text = self.llm.generate(prompt, temp=0.3)  # Lower temp for consistency
         duration = time.time() - agg_start
         
         # Extract new tool call
         tool_call = extract_tool_call(synthesized_text)
+        
+        # NEW: Validate tool exists, remap if hallucinated
+        if tool_call:
+            from tools.registry import get_registry
+            registry = get_registry()
+            tool_name = tool_call.get("tool", "")
+            if not registry.get(tool_name):
+                # Tool doesn't exist - likely hallucination like 'ast.parse' or 'unittest'
+                print(f"    ⚠️ Hallucinated tool '{tool_name}' → remapping to 'python_exec'")
+                tool_call["tool"] = "python_exec"
+                # Try to preserve any code in params
+                if "code" not in tool_call.get("params", {}):
+                    tool_call["params"] = {"code": f"# Original tool was '{tool_name}'\nprint('Task requires manual implementation')"}
         
         # Return as a specialized WorkerResponse
         return WorkerResponse(
@@ -355,7 +569,7 @@ class PoetiqRunner:
     5. Generate final response
     """
     
-    def __init__(self, num_workers: int = 3, refine_threshold: int = 15):
+    def __init__(self, num_workers: int = 3, refine_threshold: int = SCORE_THRESHOLD):
         self.num_workers = num_workers
         
         # Ensure tools are registered (only runs once due to singleton registry)
@@ -434,10 +648,20 @@ class PoetiqRunner:
         
         # Phase 3: Self-Refine winner (synthesized)
         print(f"\n🔄 Phase 3: Self-Refine loop...")
+        
+        # NEW: Generate test cases if possible
+        tool_name = winner.tool_call.get("tool") if winner.tool_call else None
+        test_cases = []
+        if tool_name == "python_exec" or "```python" in winner.raw_response:
+             test_cases = self.refiner.generate_test_cases(task, winner.raw_response)
+             if test_cases:
+                 print(f"  🧪 Generated {len(test_cases)} test cases for verification")
+        
         refined = self.refiner.refine(
             winner.raw_response, 
             task, 
-            [winner.tool_call.get("tool")] if winner.tool_call else []
+            [tool_name] if tool_name else [],
+            test_cases=test_cases
         )
         
         # Log refine result
@@ -448,6 +672,37 @@ class PoetiqRunner:
         # Phase 4: Execute tools (with agentic loop for multi-tool tasks)
         result_text = ""
         tool_call = extract_tool_call(refined["response"])
+        
+        # CRITICAL: Validate tool exists before execution (catches hallucinations from refiner)
+        if tool_call:
+            from tools.registry import get_registry
+            registry = get_registry()
+            tool_name = tool_call.get("tool", "")
+            if not registry.get(tool_name):
+                print(f"    ⚠️ Hallucinated tool '{tool_name}' → remapping to 'python_exec'")
+                tool_call["tool"] = "python_exec"
+                
+                # SMART CODE EXTRACTION: Try to find Python code in the response
+                extracted_code = None
+                response_text = refined.get("response", "")
+                
+                # Try to extract code from ```python blocks
+                import re
+                code_match = re.search(r'```python\s*\n(.+?)\n```', response_text, re.DOTALL)
+                if code_match:
+                    extracted_code = code_match.group(1).strip()
+                    print(f"    ✅ Extracted {len(extracted_code)} chars of code from response")
+                
+                # Use extracted code or placeholder
+                if extracted_code:
+                    tool_call["params"] = {"code": extracted_code}
+                elif "code" not in tool_call.get("params", {}):
+                    tool_call["params"] = {"code": f"# LLM tried to use '{tool_name}' which doesn't exist\nprint('Manual implementation needed')"}
+                
+                # CRITICAL FIX: Update the response string so AgenticLoop sees the change!
+                import json
+                refined["response"] = f"```json\n{json.dumps(tool_call, indent=2)}\n```"
+        
         if tool_call:
             print(f"\n🔧 Phase 4: Executing tools...")
             
@@ -508,6 +763,14 @@ class PoetiqRunner:
         learn_thread.start()
         print(f"\n💡 Phase 6: Learning in background...")
         
+        # Phase 7: Run Memory Maintenance (Decay) - also in background or main thread?
+        # Main thread is safer for DB locks, but quick.
+        try:
+            decay_stats = self.orchestrator.run_maintenance()
+            print(f"  🧹 Maintenance: {decay_stats.get('decayed_by', 0):.2f} decay applied")
+        except Exception as e:
+            print(f"  ⚠️ Maintenance warning: {e}")
+        
         print(f"\n⏱️ Total time: {total_time:.1f}s")
         
         # Phase 7: Memory Feedback Loop (IMPROVED - uses tool success)
@@ -534,7 +797,7 @@ class PoetiqRunner:
     
     def _generate_parallel(self, task: str) -> tuple:
         """Returns (responses, memory_ids) tuple"""
-        temps = [0.5, 0.7, 0.9]
+        temps = WORKER_TEMPS  # From config.settings [0.2, 0.3, 0.4]
         responses = []
         
         # Get unified context from orchestrator ONCE

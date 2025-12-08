@@ -15,23 +15,35 @@ class RunCommandTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Ejecuta un comando en la terminal/shell. Útil para ejecutar scripts, ver sistema, etc."
+        return "Executes a shell/terminal command. Useful for running scripts, checking system, etc."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "command": {
                 "type": "string",
-                "description": "Comando a ejecutar (ej: 'dir', 'python script.py', 'git status')"
+                "description": "Command to execute (e.g., 'dir', 'python script.py', 'git status')"
             }
         }
     
     def execute(self, command: str) -> Dict[str, Any]:
+        import shlex
         try:
+            # SECURITY: Avoid shell=True preventing injection
+            # Only use shell=True if pipes/redirection detected (less secure but necessary sometimes)
+            use_shell = any(c in command for c in ['|', '>', '<', '&'])
+            
+            if use_shell:
+                # Warning: complex commands still need shell
+                args = command
+            else:
+                # Safe mode: split arguments
+                args = shlex.split(command, posix=False) # posix=False for Windows paths
+            
             # Run command with timeout
             result = subprocess.run(
-                command,
-                shell=True,
+                args,
+                shell=use_shell,
                 capture_output=True,
                 text=True,
                 timeout=EXECUTION_TIMEOUT,
@@ -44,14 +56,14 @@ class RunCommandTool(Tool):
             
             return {
                 "success": return_code == 0,
-                "result": output if output else "(sin output)",
+                "result": output if output else "(no output)",
                 "error": error if error else None,
                 "return_code": return_code
             }
         except subprocess.TimeoutExpired:
             return {
                 "success": False,
-                "error": f"Comando excedió timeout de {EXECUTION_TIMEOUT}s"
+                "error": f"Command exceeded timeout of {EXECUTION_TIMEOUT}s"
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -66,14 +78,14 @@ class PythonExecTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Ejecuta código Python directamente. NO usar para crear archivos (usa write_file). Retorna el resultado."
+        return "Executes Python code directly. DO NOT use for creating files (use write_file). Returns the result."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "code": {
                 "type": "string",
-                "description": "Código Python a ejecutar"
+                "description": "Python code to execute"
             }
         }
     

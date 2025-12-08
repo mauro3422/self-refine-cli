@@ -160,8 +160,16 @@ YOUR RESPONSE:"""
                 ctx = self.orchestrator.get_context(f"{failed_tool} error {error}", use_llm=False)
                 if ctx.tips:
                     memory_tips = f"\n💡 MEMORY TIPS:\n{ctx.tips}\n"
-            except:
-                pass
+                
+                # New: Learn from this error immediately
+                self.orchestrator.learn(
+                    lesson=f"AVOID: {failed_tool} failed with {error[:100]}",
+                    category="tool_error",
+                    tools=[failed_tool],
+                    error_type="execution_failure"
+                )
+            except Exception as e:
+                print(f"      ⚠️ Memory error in loop: {e}")
 
         prompt = f"""A tool execution FAILED. You need to try a different approach.
 

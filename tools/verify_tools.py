@@ -16,14 +16,14 @@ class LinterTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Analiza código Python en busca de errores de sintaxis y problemas estructurales básicos. Úsalo antes de ejecutar código nuevo."
+        return "Analyzes Python code for syntax errors and basic structural issues. Use it before running new code."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Ruta al archivo .py a lintear"
+                "description": "Path to the .py file to lint"
             }
         }
     
@@ -71,14 +71,14 @@ class TestRunnerTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Ejecuta un archivo de tests (unittest o pytest style) y devueve los resultados."
+        return "Runs a test file (unittest or pytest style) and returns the results."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Ruta al archivo de tests"
+                "description": "Path to the test file"
             }
         }
     

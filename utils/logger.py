@@ -99,6 +99,20 @@ class PoetiqLogger:
             "result": result[:300]
         })
         self._save()
+        
+    def log_memory(self, query: str, context: Dict):
+        """Log memory retrieval context"""
+        self.events.append({
+            "phase": "memory",
+            "time": datetime.now().isoformat(),
+            "query": query,
+            "category": context.get("category"),
+            "confidence": context.get("confidence"),
+            "suggested_tools": context.get("tools_suggested"),
+            "memories_found": len(context.get("memories", [])),
+            "memories_preview": [m.get("lesson", "")[:100] for m in context.get("memories", [])][:3]
+        })
+        self._save()
     
     def log_final(self, response: str, score: int, total_time: float):
         """Log final result"""

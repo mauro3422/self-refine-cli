@@ -13,29 +13,29 @@ class ReplaceInFileTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Reemplaza un texto específico por otro en un archivo. Útil para refactors pequeños o fixes rápidos sin reescribir todo el archivo. Falla si el texto a reemplazar no es único o no existe."
+        return "Replaces specific text with another in a file. Useful for small refactors or quick fixes without rewriting the entire file. Fails if the text to replace is not unique or doesn't exist."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Ruta al archivo a editar"
+                "description": "Path to the file to edit"
             },
             "target": {
                 "type": "string",
-                "description": "Texto exacto a reemplazar (debe ser único en el archivo)"
+                "description": "Exact text to replace (must be unique in the file)"
             },
             "replacement": {
                 "type": "string",
-                "description": "Nuevo texto"
+                "description": "New text"
             }
         }
     
     def execute(self, path: str, target: str, replacement: str) -> Dict[str, Any]:
         try:
             if not os.path.exists(path):
-                return {"success": False, "error": f"Archivo no encontrado: {path}"}
+                return {"success": False, "error": f"File not found: {path}"}
             
             with open(path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -56,12 +56,12 @@ class ReplaceInFileTool(Tool):
                     original_text = content[match.start():match.end()]
                     new_content = content[:match.start()] + replacement + content[match.end():]
                 else:
-                    return {"success": False, "error": "El texto 'target' no se encontró (ni siquiera con búsqueda flexible). Verifique espacios e indentación."}
+                    return {"success": False, "error": "Target text not found (even with flexible search). Check spacing and indentation."}
             else:
                 if content.count(target) > 1:
                     return {
                         "success": False, 
-                        "error": f"El texto 'target' aparece {content.count(target)} veces. Debe ser único para evitar cambios no deseados."
+                        "error": f"Target text appears {content.count(target)} times. Must be unique to avoid unintended changes."
                     }
                 new_content = content.replace(target, replacement)
             
@@ -159,14 +159,14 @@ class ApplyPatchToolSimple(Tool):
     
     @property
     def description(self) -> str:
-        return "Aplica un cambio reemplazando un bloque de código original por uno nuevo. Es más tolerante que replace_in_file para bloques grandes."
+        return "Applies a change by replacing an original code block with a new one. More tolerant than replace_in_file for large blocks."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
-            "path": {"type": "string", "description": "Ruta al archivo"},
-            "original_block": {"type": "string", "description": "Bloque exacto de código a reemplazar"},
-            "new_block": {"type": "string", "description": "Nuevo bloque de código"}
+            "path": {"type": "string", "description": "Path to the file"},
+            "original_block": {"type": "string", "description": "Exact code block to replace"},
+            "new_block": {"type": "string", "description": "New code block"}
         }
 
     def execute(self, path: str, original_block: str, new_block: str) -> Dict[str, Any]:

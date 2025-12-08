@@ -13,131 +13,51 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def run_single(task: str):
-    """Run single agent"""
-    from core.agent import Agent, init_tools
+    """Run single agent (using Poetiq with 1 worker)"""
+    from core.poetiq import run_poetiq
     
     print(f"\n{'='*60}")
-    print(f"🤖 SINGLE AGENT: {task[:50]}...")
+    print(f"🤖 SINGLE AGENT (Poetiq-1): {task[:50]}...")
     print(f"{'='*60}")
     
-    init_tools()
-    agent = Agent(debug=True)
+    result = run_poetiq(task, num_workers=1)
     
-    start = time.time()
-    response = agent.run(task)
-    duration = time.time() - start
+    print(f"\n📝 Response:\n{result['response'][:500]}...")
+    print(f"\n✅ Score: {result['score']}/25 | Time: {result['total_time']:.1f}s")
     
-    print(f"\n📝 Response:\n{response[:500]}...")
-    print(f"\n✅ Score: {agent.last_score}/25 | Time: {duration:.1f}s")
-    print(f"🔧 Tools: {agent.tools_used}")
-    
-    return agent.last_score
+    return result['score']
 
 
 def run_parallel(task: str, num_workers: int = 3):
-    """Run multiple agents in parallel (true parallel - 1 call each, then vote)"""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from core.agent import Agent, init_tools
-    
-    print(f"\n{'='*60}")
-    print(f"🔀 PARALLEL ({num_workers} workers): {task[:50]}...")
-    print(f"{'='*60}")
-    
-    init_tools()
-    
-    def worker(worker_id: int):
-        # single_shot=True means NO self-refine (just 1 LLM call)
-        agent = Agent(debug=False, single_shot=True)
-        start = time.time()
-        response = agent.run(task)
-        return {
-            "id": worker_id,
-            "score": agent.last_score,
-            "tools": agent.tools_used,
-            "duration": time.time() - start,
-            "response": response
-        }
-    
-    results = []
-    start = time.time()
-    
-    print(f"  🚀 Launching {num_workers} workers (single-shot mode)...")
-    
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = [executor.submit(worker, i) for i in range(num_workers)]
-        for future in as_completed(futures):
-            result = future.result()
-            results.append(result)
-            print(f"  ✓ Worker-{result['id']}: {result['score']}/25 ({result['duration']:.1f}s)")
-    
-    parallel_time = time.time() - start
-    
-    # Find best
-    best = max(results, key=lambda r: r["score"])
-    print(f"\n🏆 Best: Worker-{best['id']} with {best['score']}/25")
-    print(f"⏱️ Parallel phase: {parallel_time:.1f}s")
-    
-    # Now refine only the winning response
-    if best["score"] < 22:
-        print(f"\n🔄 Refining winner (score < 22)...")
-        agent = Agent(debug=False)
-        # Manually set the response and run self-refine
-        final_response = agent._self_refine(best["response"], task)
-        print(f"  📊 Final score: {agent.last_score}/25")
-        best["score"] = agent.last_score
-        best["response"] = final_response
-    
-    total_time = time.time() - start
-    print(f"⏱️ Total time: {total_time:.1f}s")
-    
-    return best["score"]
+    """Run multiple agents (Poetiq mode)"""
+    from core.poetiq import run_poetiq
+    return run_poetiq(task, num_workers)['score']
 
 
 def run_poetiq(task: str, num_workers: int = 3):
-    """Run full Poetiq system with true single-call workers"""
-    from core.poetiq import run_poetiq as poetiq_run
-    from tools.file_tools import register_file_tools
-    from tools.command_tools import register_command_tools
-    
-    # Init tools
-    print("\n🔧 Initializing tools...")
-    register_file_tools()
-    register_command_tools()
-    
-    result = poetiq_run(task, num_workers)
-    
-    print(f"\n📝 Response:\n{result['response'][:500]}...")
-    print(f"\n✨ Winner: Worker-{result['winner_id']}")
-    print(f"🔧 Tools: {result['tools_used']}")
-    print(f"⏱️ Parallel phase: {result['parallel_time']:.1f}s")
-    
-    return 25 if result['tools_used'] else 0  # Simplified score
+    """Run full Poetiq system"""
+    from core.poetiq import run_poetiq
+    result = run_poetiq(task, num_workers)
+    return result['score']
 
 
 def run_stress(num_agents: int = 6):
-    """Run stress test with many agents"""
+    """Run stress test using Poetiq instances"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from core.agent import Agent, init_tools
-    from config.settings import AGENT_WORKSPACE
-    
-    os.makedirs(AGENT_WORKSPACE, exist_ok=True)
+    from core.poetiq import run_poetiq
     
     print(f"\n{'='*60}")
-    print(f"🔥 STRESS TEST: {num_agents} agents")
+    print(f"🔥 STRESS TEST: {num_agents} Poetiq instances")
     print(f"{'='*60}")
     
-    init_tools()
-    
     def agent_task(agent_id: int):
-        agent = Agent(debug=False)
-        task = f"Crea archivo agent_{agent_id}.txt con el numero {agent_id} y un saludo."
-        start = time.time()
-        response = agent.run(task)
+        task = f"Crea archivo agent_{agent_id}.txt con el numero {agent_id}"
+        # Run with 1 worker per instance to save resources
+        result = run_poetiq(task, num_workers=1)
         return {
             "id": agent_id,
-            "score": agent.last_score,
-            "duration": time.time() - start,
-            "success": agent.last_score >= 18
+            "score": result['score'],
+            "success": result['score'] >= 18
         }
     
     results = []
@@ -149,15 +69,10 @@ def run_stress(num_agents: int = 6):
             result = future.result()
             results.append(result)
             status = "✅" if result["success"] else "❌"
-            print(f"  {status} Agent-{result['id']}: {result['score']}/25 ({result['duration']:.1f}s)")
+            print(f"  {status} Instance-{result['id']}: {result['score']}/25")
     
-    total_time = time.time() - start
     success_count = sum(1 for r in results if r["success"])
-    
-    print(f"\n{'='*60}")
-    print(f"📊 RESULTS: {success_count}/{num_agents} successful")
-    print(f"⏱️ Total time: {total_time:.1f}s")
-    print(f"📁 Check sandbox/ for created files")
+    print(f"\n📊 RESULTS: {success_count}/{num_agents} successful")
     
     return success_count
 

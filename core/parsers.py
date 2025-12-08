@@ -76,6 +76,32 @@ def extract_tool_call(response: str) -> Optional[Dict[str, Any]]:
         if result:
             return result
     
+    # Strategy 6: Handle Python syntax (r'...', True/False, comments)
+    if raw:
+        python_fixed = raw
+        # Remove Python raw string prefix r'...' or r"..."
+        python_fixed = re.sub(r"r(['\"])", r'\1', python_fixed)
+        # Convert Python True/False to JSON true/false
+        python_fixed = re.sub(r'\bTrue\b', 'true', python_fixed)
+        python_fixed = re.sub(r'\bFalse\b', 'false', python_fixed)
+        python_fixed = re.sub(r'\bNone\b', 'null', python_fixed)
+        # Remove Python comments
+        python_fixed = re.sub(r'#.*?(?=[\n\r,}]|$)', '', python_fixed)
+        # Remove trailing commas before }
+        python_fixed = re.sub(r',\s*}', '}', python_fixed)
+        python_fixed = re.sub(r',\s*]', ']', python_fixed)
+        result = try_parse(python_fixed)
+        if result:
+            return result
+    
+    # Strategy 7: Just extract tool name if all else fails
+    if raw:
+        tool_match = re.search(r'"tool"\s*:\s*"([^"]+)"', raw)
+        if tool_match:
+            tool_name = tool_match.group(1)
+            # Return minimal valid tool call
+            return {"tool": tool_name, "params": {}}
+    
     return None
 
 

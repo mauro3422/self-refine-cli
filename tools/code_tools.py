@@ -14,24 +14,24 @@ class CodeStructureTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Analiza la estructura de un archivo Python (AST). Lista clases, métodos y funciones con sus argumentos y docstrings. Útil para entender código desconocido."
+        return "Analyzes the structure of a Python file (AST). Lists classes, methods, and functions with their arguments and docstrings. Useful for understanding unfamiliar code."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Ruta al archivo Python a analizar"
+                "description": "Path to the Python file to analyze"
             }
         }
     
     def execute(self, path: str) -> Dict[str, Any]:
         try:
             if not os.path.exists(path):
-                return {"success": False, "error": f"Archivo no encontrado: {path}"}
+                return {"success": False, "error": f"File not found: {path}"}
             
             if not path.endswith('.py'):
-                return {"success": False, "error": "Solo se pueden analizar archivos .py"}
+                return {"success": False, "error": "Only .py files can be analyzed"}
             
             with open(path, 'r', encoding='utf-8') as f:
                 code = f.read()

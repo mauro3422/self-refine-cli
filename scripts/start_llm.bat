@@ -21,23 +21,23 @@ if %ERRORLEVEL%==0 (
 
 echo Model: LFM2-1.2B-F16
 echo Port: 8000
-echo Parallel Slots: 6
+echo Parallel Slots: 3 (optimized for Poetiq)
+echo Context Size: 32K tokens (max for LFM2)
 echo GPU Layers: ALL (Vulkan)
+echo Logging to: logs\llm_server.log
 echo.
+
+:: Create logs directory if not exists
+if not exist logs mkdir logs
 
 cd server
 if not exist llama-server.exe (
-    echo ❌ Error: llama-server.exe not found in server/ directory!
+    echo Error: llama-server.exe not found in server/ directory!
     pause
     exit /b 1
 )
 
-llama-server.exe --model "C:/Users/mauro/.lmstudio/models/LiquidAI/LFM2-1.2B-GGUF/LFM2-1.2B-F16.gguf" ^
-    --port 8000 ^
-    --host 0.0.0.0 ^
-    --n-gpu-layers 999 ^
-    --ctx-size 16384 ^
-    --parallel 6 ^
-    --cont-batching
+:: Run with output to both console AND file using PowerShell tee
+powershell -Command "& { .\llama-server.exe --model 'C:/Users/mauro/.lmstudio/models/LiquidAI/LFM2-1.2B-GGUF/LFM2-1.2B-F16.gguf' --port 8000 --host 0.0.0.0 --n-gpu-layers 999 --ctx-size 32768 --parallel 3 --cont-batching 2>&1 | Tee-Object -FilePath '..\logs\llm_server.log' }"
 
 pause

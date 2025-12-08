@@ -2,6 +2,9 @@
 
 A self-refining AI agent powered by **llama.cpp** with true parallel inference on GPU.
 
+> ⚠️ **LOCAL HARDWARE ONLY** - This project is designed to run entirely on your local machine using llama.cpp. It does NOT use paid APIs (OpenAI, Anthropic, Google). Perfect for users with limited budgets who want AI experimentation on their own hardware.
+
+
 ## 🚀 Quick Start
 
 ```bash

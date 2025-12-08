@@ -13,29 +13,29 @@ class SearchFilesTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Busca un texto o patrón dentro de archivos en un directorio. Útil para encontrar definiciones, TODOs, o referencias en el código."
+        return "Searches for text or patterns within files in a directory. Useful for finding definitions, TODOs, or references in code."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "query": {
                 "type": "string",
-                "description": "Texto a buscar dentro de los archivos"
+                "description": "Text to search for within files"
             },
             "path": {
                 "type": "string",
-                "description": "Directorio donde buscar (default: .)"
+                "description": "Directory to search in (default: .)"
             },
             "extensions": {
                 "type": "string",
-                "description": "Extensiones separadas por coma (ej: .py,.md) para filtrar"
+                "description": "Comma-separated extensions (e.g., .py,.md) to filter"
             }
         }
     
     def execute(self, query: str, path: str = ".", extensions: str = None) -> Dict[str, Any]:
         try:
             if not os.path.exists(path):
-                return {"success": False, "error": f"Path no encontrado: {path}"}
+                return {"success": False, "error": f"Path not found: {path}"}
             
             # Parse extensions
             valid_exts = None

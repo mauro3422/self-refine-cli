@@ -13,24 +13,51 @@ class ReadFileTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Lee el contenido de un archivo. Útil para leer código, configs, docs, etc."
+        return "Reads the contents of a file. Useful for reading code, configs, docs, etc."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Ruta al archivo a leer (absoluta o relativa)"
+                "description": "Path to the file to read (absolute or relative)"
             }
         }
     
     def execute(self, path: str) -> Dict[str, Any]:
         try:
             if not os.path.exists(path):
-                return {"success": False, "error": f"Archivo no encontrado: {path}"}
+                # NEW: Smart suggestions when file not found
+                dir_path = os.path.dirname(path) or "."
+                filename = os.path.basename(path)
+                
+                suggestions = []
+                
+                # Check if directory exists
+                if os.path.exists(dir_path) and os.path.isdir(dir_path):
+                    # Find similar files in the directory
+                    try:
+                        existing_files = os.listdir(dir_path)
+                        # Simple similarity: files with same extension or similar name
+                        ext = os.path.splitext(filename)[1]
+                        similar = [f for f in existing_files if f.endswith(ext) or filename.lower() in f.lower()][:5]
+                        if similar:
+                            suggestions.append(f"Similar files in {dir_path}: {', '.join(similar)}")
+                    except:
+                        pass
+                    suggestions.append(f"TIP: Use list_dir('{dir_path}') to see available files")
+                else:
+                    suggestions.append(f"Directory '{dir_path}' does not exist. Use list_dir('.') to explore")
+                
+                suggestion_text = ". ".join(suggestions) if suggestions else ""
+                
+                return {
+                    "success": False, 
+                    "error": f"File not found: {path}. {suggestion_text}"
+                }
             
             if not os.path.isfile(path):
-                return {"success": False, "error": f"No es un archivo: {path}"}
+                return {"success": False, "error": f"Not a file: {path}"}
             
             with open(path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -45,6 +72,7 @@ class ReadFileTool(Tool):
             return {"success": False, "error": str(e)}
 
 
+
 class WriteFileTool(Tool):
     """Tool to write content to a file"""
     
@@ -54,18 +82,18 @@ class WriteFileTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Escribe contenido a un archivo. PREFERIDO para crear nuevos archivos o sobrescribir. Crea el archivo si no existe."
+        return "Writes content to a file. PREFERRED for creating new files or overwriting. Creates the file if it doesn't exist."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Ruta al archivo a escribir"
+                "description": "Path to the file to write"
             },
             "content": {
                 "type": "string",
-                "description": "Contenido a escribir en el archivo"
+                "description": "Content to write to the file"
             }
         }
     
@@ -81,7 +109,7 @@ class WriteFileTool(Tool):
             
             return {
                 "success": True,
-                "result": f"Archivo escrito: {path}",
+                "result": f"File written: {path}",
                 "path": path,
                 "bytes_written": len(content)
             }
@@ -98,24 +126,24 @@ class ListDirectoryTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Lista el contenido de un directorio (archivos y carpetas)."
+        return "Lists the contents of a directory (files and folders)."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Ruta al directorio a listar"
+                "description": "Path to the directory to list"
             }
         }
     
     def execute(self, path: str) -> Dict[str, Any]:
         try:
             if not os.path.exists(path):
-                return {"success": False, "error": f"Directorio no encontrado: {path}"}
+                return {"success": False, "error": f"Directory not found: {path}"}
             
             if not os.path.isdir(path):
-                return {"success": False, "error": f"No es un directorio: {path}"}
+                return {"success": False, "error": f"Not a directory: {path}"}
             
             entries = []
             for entry in os.listdir(path):

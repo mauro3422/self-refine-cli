@@ -45,20 +45,23 @@ class WorkingMemory:
     def index_workspace(self, workspace_path: str):
         """
         Scan and index all relevant files in the workspace.
-        This allows the agent to 'know' the code structure.
+        Also cleans up stale files that were deleted from disk.
         """
         if not self.collection:
             return
             
         print(f"📂 Indexing workspace: {workspace_path}...")
         count = 0
+        real_paths = set()
         
+        # 1. Index current files
         for root, _, files in os.walk(workspace_path):
             for file in files:
                 ext = os.path.splitext(file)[1].lower()
                 if ext in self.ACCEPTED_EXTENSIONS:
                     full_path = os.path.join(root, file)
                     rel_path = os.path.relpath(full_path, workspace_path)
+                    real_paths.add(rel_path)
                     
                     try:
                         self._index_file(full_path, rel_path)
@@ -67,6 +70,31 @@ class WorkingMemory:
                         print(f"  ❌ Failed to index {rel_path}: {e}")
                         
         print(f"✅ Indexed {count} project files.")
+        
+        # 2. Cleanup stale files (Sync logic)
+        try:
+            # Get all paths currently in DB
+            existing = self.collection.get(include=['metadatas'])
+            db_paths = set()
+            if existing and existing['metadatas']:
+                for meta in existing['metadatas']:
+                    if meta and 'path' in meta:
+                        db_paths.add(meta['path'])
+            
+            # Find files in DB that are NOT on disk
+            stale_paths = db_paths - real_paths
+            
+            if stale_paths:
+                print(f"🧹 Sync: Removing {len(stale_paths)} stale files from memory...")
+                # Delete by path metadata
+                for path in stale_paths:
+                    self.collection.delete(where={"path": path})
+                    # Also remove from local cache if present
+                    self.indexed_files.discard(path)
+                print(f"✅ Cleaned up {len(stale_paths)} files.")
+                
+        except Exception as e:
+            print(f"⚠️ Memory sync warning: {e}")
     
     def _index_file(self, full_path: str, rel_path: str):
         """Read and vectorise a single file with intelligent chunking"""

@@ -115,6 +115,19 @@ class VectorMemory:
             "available": True,
             "count": self.collection.count()
         }
+    
+    def close(self):
+        """Cleanup ChromaDB client"""
+        try:
+            if hasattr(self, 'client') and self.client:
+                # Some clients might not have close(), check first
+                if hasattr(self.client, 'close'):
+                    self.client.close()
+        except:
+            pass
+            
+    def __del__(self):
+        self.close()
 
 
 import threading

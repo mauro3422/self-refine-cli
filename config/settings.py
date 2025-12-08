@@ -1,28 +1,59 @@
 # Configuration - Self-Refine CLI with llama.cpp
+# Optimized for Liquid LMF2 (small model)
+# ============================================
+# ALL configurable values should be HERE, not hardcoded elsewhere!
 
-# llama.cpp Server
+# ===================
+# LLM Server
+# ===================
 SERVER_URL = "http://localhost:8000/v1"  # Local llama.cpp server
 
-# Model Parameters
-TEMPERATURE = 0.7
-TEMPERATURE_FEEDBACK = 0.3
+# ===================
+# Model Parameters (LMF2 optimized)
+# ===================
+TEMPERATURE = 0.3           # Main generation temp (LMF2 recommends 0.3)
+TEMPERATURE_FEEDBACK = 0.2  # Lower for evaluation/memory tasks
 MAX_TOKENS = 4096
 
-# Poetiq Parameters
-NUM_WORKERS = 3          # Default parallel workers
-WORKER_TEMPS = [0.5, 0.7, 0.9]  # Temperatures for diversity
+# ===================
+# Poetiq Parallel Workers
+# ===================
+NUM_WORKERS = 3
+WORKER_TEMPS = [0.2, 0.3, 0.4]  # Lower temps = less hallucination
 
-# Self-Refine Parameters
-MAX_ITERATIONS = 5
-SCORE_THRESHOLD = 22
-FEEDBACK_DIMENSIONS = 5
+# ===================
+# Self-Refine Loop
+# ===================
+MAX_ITERATIONS = 5          # Max refinement iterations
+SCORE_THRESHOLD = 22        # Stop if score >= this
+FEEDBACK_DIMENSIONS = 5     # Evaluation dimensions
 
-# Execution Safety
-EXECUTION_TIMEOUT = 30
+# ===================
+# Autonomous Loop
+# ===================
+AUTO_SLEEP_INTERVAL = 5         # Seconds between tasks
+AUTO_HEALTH_CHECK_EVERY = 10    # Check health every N tasks
+AUTO_MAX_CONSECUTIVE_FAIL = 3   # Trigger restart after N failures
+AUTO_SUCCESS_SCORE = 10         # Score >= this = partial success
 
+# ===================
+# Memory System
+# ===================
+MEMORY_CACHE_SIZE = 100         # Max cached LLM evaluations
+MEMORY_MIN_IMPORTANCE = 5       # Min importance to retrieve
+MAX_SESSIONS_SAVED = 10         # How many session logs to keep
+
+# ===================
+# Agent Execution
+# ===================
+EXECUTION_TIMEOUT = 30          # Seconds for tool execution
+AGENT_MAX_ITERATIONS = 10       # Max agentic loop iterations
+AGENT_WORKSPACE = "sandbox"     # Working directory
+
+# ===================
 # Paths
-DATA_DIR = "data"         # Persistent data: memories, graph, cache
-OUTPUT_DIR = "outputs"    # Transient data: logs, sessions
+# ===================
+DATA_DIR = "data"           # Persistent: memories, graph, cache
+OUTPUT_DIR = "outputs"      # Transient: logs, sessions
 LOG_FILE = "outputs/refine_history.json"
-AGENT_MAX_ITERATIONS = 10
-AGENT_WORKSPACE = "sandbox"
+

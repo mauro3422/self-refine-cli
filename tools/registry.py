@@ -64,17 +64,21 @@ class ToolRegistry:
                 "required": param_info.get("required", False)
             }
         
-        # Add example based on tool type
-        if name == "write_file":
-            schema["example"] = '{"tool": "write_file", "params": {"path": "sandbox/file.py", "content": "def foo(): pass"}}'
-        elif name == "read_file":
-            schema["example"] = '{"tool": "read_file", "params": {"path": "sandbox/file.py"}}'
-        elif name == "list_dir":
-            schema["example"] = '{"tool": "list_dir", "params": {"path": "sandbox/"}}'
-        elif name == "python_exec":
-            schema["example"] = '{"tool": "python_exec", "params": {"code": "print(2+2)"}}'
-        elif name == "run_command":
-            schema["example"] = '{"tool": "run_command", "params": {"command": "ls -la"}}'
+        # Add example for EVERY tool (critical for LLM to understand usage)
+        examples = {
+            "write_file": '{"tool": "write_file", "params": {"path": "sandbox/file.py", "content": "def foo(): pass"}}',
+            "read_file": '{"tool": "read_file", "params": {"path": "sandbox/file.py"}}',
+            "list_dir": '{"tool": "list_dir", "params": {"path": "sandbox/"}}',
+            "python_exec": '{"tool": "python_exec", "params": {"code": "print(2+2)"}}',
+            "run_command": '{"tool": "run_command", "params": {"command": "dir"}}',
+            "search_files": '{"tool": "search_files", "params": {"query": "def main", "path": "sandbox/", "extensions": ".py"}}',
+            "analyze_code_structure": '{"tool": "analyze_code_structure", "params": {"path": "sandbox/main.py"}}',
+            "replace_in_file": '{"tool": "replace_in_file", "params": {"path": "sandbox/file.py", "target": "old_text", "replacement": "new_text"}}',
+            "apply_patch": '{"tool": "apply_patch", "params": {"path": "sandbox/file.py", "original_block": "def old():", "new_block": "def new():"}}',
+            "linter": '{"tool": "linter", "params": {"path": "sandbox/script.py"}}',
+            "run_tests": '{"tool": "run_tests", "params": {"path": "sandbox/test_module.py"}}'
+        }
+        schema["example"] = examples.get(name, "")
         
         return schema
     
@@ -94,7 +98,30 @@ class ToolRegistry:
         """Execute a tool by name, filtering to only valid parameters"""
         tool = self.get(name)
         if not tool:
-            return {"success": False, "error": f"Tool '{name}' not found"}
+            # NEW: Smart suggestions for hallucinated tools
+            available = self.list_tools()
+            
+            # Find similar tool names (simple fuzzy match)
+            similar = []
+            name_lower = name.lower()
+            for t in available:
+                # Check if any part of the name matches
+                if any(word in t.lower() for word in name_lower.split('_')):
+                    similar.append(t)
+                elif any(word in name_lower for word in t.lower().split('_')):
+                    similar.append(t)
+            
+            suggestion = ""
+            if similar:
+                suggestion = f" Did you mean: {', '.join(similar[:3])}?"
+            else:
+                suggestion = f" Available tools: {', '.join(available)}"
+            
+            return {
+                "success": False, 
+                "error": f"Tool '{name}' not found.{suggestion}",
+                "available_tools": available  # Include for learning
+            }
         
         try:
             # Filter kwargs to only include valid parameters for this tool

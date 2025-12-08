@@ -2,7 +2,7 @@
 # Coordinates: Context Vectors + LLM-Linker + SmartMemory + ICV
 
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from memory.base import get_memory, SmartMemory
 from memory.context_vectors import get_context_vectors, get_icv, ContextVectors, InContextVector
 from memory.llm_linker import get_llm_linker, LLMLinker
@@ -99,6 +99,18 @@ class MemoryOrchestrator:
             else:
                 print(f"   Memories: (none found)")
         
+        # Log this retrieval
+        try:
+            from utils.logger import get_logger
+            get_logger().log_memory(query, {
+                "category": category,
+                "confidence": confidence,
+                "tools_suggested": tools,
+                "memories": memories
+            })
+        except Exception as e:
+            print(f"Logger error: {e}")
+
         return MemoryContext(
             memories=memories,
             category=category,
@@ -136,6 +148,19 @@ class MemoryOrchestrator:
         # Get project context
         project_files = self.working_memory.search_project(query)
         
+        # Log this retrieval
+        try:
+            from utils.logger import get_logger
+            get_logger().log_memory(query, {
+                "category": category,
+                "confidence": 0.0,
+                "tools_suggested": tools,
+                "memories": memories,
+                "refine_context": True
+            })
+        except Exception as e:
+            print(f"Logger error: {e}")
+
         return MemoryContext(
             memories=memories,
             category=category,
@@ -213,6 +238,25 @@ class MemoryOrchestrator:
             status = "✅ SUCCESS" if success else "❌ FAILURE"
             print(f"\n📊 MEMORY FEEDBACK: {status} for memories {memory_ids}")
     
+    def run_maintenance(self) -> Dict[str, Any]:
+        """
+        Run periodic maintenance:
+        1. Apply memory decay
+        2. Clean up weak memories
+        """
+        print("\n🧹 Running Memory Maintenance...")
+        
+        # 1. Decay
+        decay_stats = self.memory.run_decay()
+        
+        # 2. Cleanup (e.g. if importance < 2)
+        # TODO: Implement strict cleanup if size > limit
+        
+        if DEBUG_MEMORY:
+            print(f"   Decay stats: {decay_stats}")
+            
+        return decay_stats
+
     def stats(self) -> Dict:
         self.memory.reload()  # Sync with other processes
         return {
