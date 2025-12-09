@@ -33,7 +33,7 @@ OLD: {old_text[:200]}
 NEW: {new_memory[:200]}
 
 Answer ONLY: YES or NO"""
-            response = self.llm.generate(prompt, temp=0.1)
+            response = self.llm.generate(prompt, temp=0.1, slot_id=-1)
             return "YES" in response.upper()
         except:
             return overlap > 5  # Fallback to heuristic
@@ -52,7 +52,7 @@ OLD: {old_text}
 NEW: {new_memory}
 
 Answer: CONTRADICT or COMPATIBLE"""
-            detect_response = self.llm.generate(detect_prompt, temp=0.1)
+            detect_response = self.llm.generate(detect_prompt, temp=0.1, slot_id=-1)
             is_contradiction = "CONTRADICT" in detect_response.upper()
         except:
             is_contradiction = False
@@ -77,7 +77,7 @@ NEW: {new_memory}
 
 MERGED (1-2 sentences only):"""
 
-        merged = self.llm.generate(merge_prompt, temp=0.3)
+        merged = self.llm.generate(merge_prompt, temp=0.3, slot_id=-1)
         merged = merged.strip()
         if merged.startswith("MERGED"):
             merged = merged.split(":", 1)[-1].strip()

@@ -87,6 +87,10 @@ class PoetiqRunner:
         print(f"🎯 POETIQ ({self.num_workers} workers): {task[:50]}...")
         print(f"{'='*60}")
         
+        # Reset reflection buffer for new session (prevents leakage)
+        from memory.reflection_buffer import get_buffer as get_reflection_buffer
+        get_reflection_buffer().start_session(logger.session_id)
+        
         # Phase 1: Parallel generation (True Poetiq - workers verify code)
         print(f"\n📡 Phase 1: Parallel generation...")
         responses, memory_ids_used = self._generate_parallel(task)

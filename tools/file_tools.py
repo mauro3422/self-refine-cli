@@ -98,23 +98,34 @@ class WriteFileTool(Tool):
         }
     
     def execute(self, path: str, content: str) -> Dict[str, Any]:
-        try:
-            # Create directory if needed
-            dir_path = os.path.dirname(path)
-            if dir_path and not os.path.exists(dir_path):
-                os.makedirs(dir_path)
-            
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            return {
-                "success": True,
-                "result": f"File written: {path}",
-                "path": path,
-                "bytes_written": len(content)
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        # Retry logic for Windows file locking
+        max_retries = 3
+        import time
+        
+        for attempt in range(max_retries):
+            try:
+                # Create directory if needed
+                dir_path = os.path.dirname(path)
+                if dir_path and not os.path.exists(dir_path):
+                    os.makedirs(dir_path)
+                
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                
+                return {
+                    "success": True,
+                    "result": f"File written: {path}",
+                    "path": path,
+                    "bytes_written": len(content)
+                }
+            except (PermissionError, OSError) as e:
+                # If locking error and checks remain, wait and retry
+                if attempt < max_retries - 1:
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                return {"success": False, "error": f"Failed after {max_retries} attempts: {str(e)}"}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
 
 
 class ListDirectoryTool(Tool):

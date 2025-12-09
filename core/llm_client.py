@@ -1,13 +1,24 @@
-# LLM Client - llama.cpp Server Only
-# Uses OpenAI-compatible API on local server
+# LLM Client - llama.cpp Server with Slot Affinity
+# Uses native llama.cpp API for slot control + OpenAI-compatible for simple requests
 
 import time
+import requests
 from openai import OpenAI
 from config.settings import SERVER_URL, TEMPERATURE, MAX_TOKENS
 
 
 class LLMClient:
-    """Client for llama.cpp server via OpenAI protocol"""
+    """
+    Client for llama.cpp server with SLOT AFFINITY support.
+    
+    Slot affinity prevents context thrashing by assigning workers to dedicated slots.
+    - Worker 0 → Slot 0
+    - Worker 1 → Slot 1
+    - Worker 2 → Slot 2
+    
+    When slot_id is specified, uses native /completion API.
+    When slot_id is -1 (default), uses OpenAI-compatible API.
+    """
     
     MAX_RETRIES = 3
     RETRY_DELAY_BASE = 1  # seconds, will double each retry
@@ -17,6 +28,8 @@ class LLMClient:
             base_url=SERVER_URL,
             api_key="not-needed"
         )
+        # Native API base URL (without /v1)
+        self.native_url = SERVER_URL.replace("/v1", "")
         self.consecutive_errors = 0  # Track health
     
     def health_check(self) -> dict:
@@ -37,8 +50,22 @@ class LLMClient:
             self.consecutive_errors += 1
             return {"healthy": False, "latency_ms": None, "error": str(e)}
     
-    def chat(self, messages: list, temp: float = TEMPERATURE) -> str:
-        """Send chat request to llama.cpp server with automatic retry on failure"""
+    def chat(self, messages: list, temp: float = TEMPERATURE, slot_id: int = -1) -> str:
+        """
+        Send chat request to llama.cpp server with automatic retry on failure.
+        
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            temp: Temperature for generation
+            slot_id: If >= 0, use native API with specific slot. If -1, use OpenAI API (auto-assign).
+        """
+        if slot_id >= 0:
+            return self._chat_with_slot(messages, temp, slot_id)
+        else:
+            return self._chat_openai(messages, temp)
+    
+    def _chat_openai(self, messages: list, temp: float) -> str:
+        """Use OpenAI-compatible API (no slot control)"""
         last_error = None
         
         for attempt in range(self.MAX_RETRIES):
@@ -65,11 +92,72 @@ class LLMClient:
         print(f"    ❌ LLM failed after {self.MAX_RETRIES} attempts. Last error: {last_error}")
         return f"ERROR: Connection error. Server may be overloaded or down."
     
-    def generate(self, prompt: str, temp: float = TEMPERATURE) -> str:
+    def _chat_with_slot(self, messages: list, temp: float, slot_id: int) -> str:
+        """
+        Use native llama.cpp /completion API with specific slot.
+        This prevents context thrashing by keeping worker-slot affinity.
+        """
+        # Convert messages to single prompt (llama.cpp native format)
+        prompt = self._messages_to_prompt(messages)
+        
+        payload = {
+            "prompt": prompt,
+            "temperature": temp,
+            "n_predict": MAX_TOKENS,
+            "id_slot": slot_id,  # KEY: Assign to specific slot!
+            "cache_prompt": True,  # Reuse cached context
+            "stop": ["</s>", "[INST]", "[/INST]", "User:", "Human:"],
+        }
+        
+        last_error = None
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                response = requests.post(
+                    f"{self.native_url}/completion",
+                    json=payload,
+                    timeout=300  # 5 min timeout for long generations
+                )
+                
+                if response.status_code == 200:
+                    self.consecutive_errors = 0
+                    result = response.json()
+                    return result.get("content", "")
+                else:
+                    raise Exception(f"HTTP {response.status_code}: {response.text[:100]}")
+                    
+            except Exception as e:
+                last_error = e
+                self.consecutive_errors += 1
+                
+                if attempt < self.MAX_RETRIES - 1:
+                    delay = self.RETRY_DELAY_BASE * (2 ** attempt)
+                    print(f"    ⚠️ LLM slot {slot_id} error (attempt {attempt+1}): {str(e)[:50]}... Retrying in {delay}s")
+                    time.sleep(delay)
+        
+        print(f"    ❌ LLM slot {slot_id} failed after {self.MAX_RETRIES} attempts. Last error: {last_error}")
+        return f"ERROR: Connection error on slot {slot_id}."
+    
+    def _messages_to_prompt(self, messages: list) -> str:
+        """Convert OpenAI-style messages to llama.cpp prompt format"""
+        prompt_parts = []
+        
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            
+            if role == "system":
+                prompt_parts.append(f"[INST] <<SYS>>\n{content}\n<</SYS>>\n")
+            elif role == "user":
+                prompt_parts.append(f"[INST] {content} [/INST]\n")
+            elif role == "assistant":
+                prompt_parts.append(f"{content}\n")
+        
+        return "".join(prompt_parts)
+    
+    def generate(self, prompt: str, temp: float = TEMPERATURE, slot_id: int = -1) -> str:
         """Simple wrapper for single prompt"""
-        return self.chat([{"role": "user", "content": prompt}], temp)
+        return self.chat([{"role": "user", "content": prompt}], temp, slot_id)
     
     def needs_restart(self) -> bool:
         """Check if server likely needs restart based on error patterns"""
         return self.consecutive_errors >= 5  # 5+ consecutive failures = bad
-

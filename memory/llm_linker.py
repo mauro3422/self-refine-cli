@@ -88,7 +88,7 @@ LESSONS:
 Return ONLY the numbers of the 3 most relevant, e.g: 2,5,1
 RANKING:"""
 
-        response = self.llm.generate(prompt, temp=0.3)
+        response = self.llm.generate(prompt, temp=0.3, slot_id=-1)
         
         # Parse ranking
         return self._parse_ranking(response, candidates)
@@ -139,7 +139,7 @@ Only include connections score 5+.
 
 CONNECTIONS:"""
 
-        response = self.llm.generate(prompt, temp=0.3)
+        response = self.llm.generate(prompt, temp=0.3, slot_id=-1)
         
         return self._parse_links(response, existing_memories)
     

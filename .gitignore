@@ -25,4 +25,4 @@ sandbox/
 outputs/debug_logs/
 outputs/benchmark_*.json
 outputs/vector_memory*/
-outputs/*.json
+# outputs/*.json  # Temporarily disabled for analysis

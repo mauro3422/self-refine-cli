@@ -14,6 +14,7 @@ from core.parsers import extract_tool_call
 from tools.registry import get_registry
 from config.settings import WORKER_TEMPS
 from .worker import WorkerResponse
+from memory.reflection_buffer import get_buffer as get_reflection_buffer
 
 
 class SelfRefiner:
@@ -36,6 +37,9 @@ class SelfRefiner:
         # Poetiq-style code verification
         from core.code_verifier import get_verifier
         self.verifier = get_verifier()
+        
+        # Reflexion buffer for intra-session learning
+        self.reflection_buffer = get_reflection_buffer()
     
     def refine(self, response: str, task: str, tools_used: List[str], 
                 errors: List[str] = None, test_cases: List[Dict] = None) -> Dict[str, Any]:
@@ -115,6 +119,16 @@ class SelfRefiner:
             # Step 5: ITERATE (refine with memory + verification feedback) - PARALLEL
             refine_start = time.time()
             combined_feedback = feedback + verify_feedback
+            
+            # Add reflection from this iteration's failure
+            if not should_stop:
+                self.reflection_buffer.add_from_error(i + 1, combined_feedback)
+            
+            # Get reflection context to inject
+            reflection_context = self.reflection_buffer.get_context()
+            if reflection_context:
+                extra_context = f"{extra_context}\n\n{reflection_context}" if extra_context else reflection_context
+            
             print(f"    🔄 Parallel refine (3 workers)...")
             current_response = self._parallel_refine(
                 current_response, task, combined_feedback, tools_used, extra_context

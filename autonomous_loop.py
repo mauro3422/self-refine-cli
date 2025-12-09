@@ -22,6 +22,7 @@ from config.settings import (
     AUTO_SUCCESS_SCORE
 )
 from utils.logger import get_logger
+from utils.monitoring import get_monitoring_logger
 
 # Configuration (from settings.py)
 LOG_FILE = "autonomous.log"
@@ -72,11 +73,15 @@ def load_checkpoint() -> dict:
 def generate_task(runner):
     """Generate a meaningful task using the LLM itself."""
     prompt = (
-        "Analyze the current state of a Python CLI project (Self-Refine). "
-        "Suggest a single, concrete, CODING task that can be verified with a unit test. "
-        "Examples: 'Implement a function to validate email addresses in utils/validators.py', "
-        "'Create a helper function to calculate file hashes in tools/file_tools.py'. "
-        "Avoid purely documentation tasks for now. Return ONLY the task description."
+        "Generate a CODING task for a Python CLI project. "
+        "PICK ONE category randomly from: "
+        "1) FILE OPERATIONS: read/write files, parse JSON/CSV, directory traversal "
+        "2) DATA PROCESSING: string manipulation, list/dict transformations, sorting algorithms "
+        "3) MATH/ALGORITHMS: implement fibonacci, prime checker, string patterns "
+        "4) SYSTEM TOOLS: environment variables, path handling, command execution "
+        "5) VALIDATION: email, URL, phone, date format validators "
+        "The task MUST be self-contained with testable output. "
+        "Return ONLY the task description in 1-2 sentences."
     )
     
     try:
@@ -108,6 +113,7 @@ def main():
     try:
         runner = PoetiqRunner(num_workers=3)
         llm_client = LLMClient()  # For health checks
+        monitor = get_monitoring_logger()  # Night supervision
         log("✅ System Initialized. Entering loop.")
         
         while True:
@@ -158,6 +164,8 @@ def main():
             
             # 2. Execute
             start_time = time.time()
+            session_id = f"auto_{task_count}_{int(start_time)}"
+            monitor.log_task_start(task, session_id)
             try:
                 result = runner.run(task)
                 duration = time.time() - start_time
@@ -168,6 +176,13 @@ def main():
                 if score >= AUTO_SUCCESS_SCORE:
                     consecutive_failures = 0
                 
+                # Log to monitor for night supervision
+                monitor.log_task_complete(
+                    session_id, score, duration,
+                    verified=result.get('verification_passed', False),
+                    skipped_refine=result.get('skipped_refine', False)
+                )
+                
                 task_count += 1
                 
                 # Checkpoint every 5 tasks
@@ -177,6 +192,7 @@ def main():
                     
             except Exception as e:
                 log(f"❌ Task Failed: {e}")
+                monitor.log_error("task_execution", str(e), {"task": task[:50]})
                 consecutive_failures += 1
             
             # 3. Sleep

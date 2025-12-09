@@ -10,6 +10,7 @@ from core.llm_client import LLMClient
 from core.prompts import AGENT_SYSTEM_PROMPT
 from core.parsers import extract_tool_call
 from tools.registry import get_registry
+from utils.error_translator import format_for_llm
 
 
 @dataclass
@@ -117,18 +118,27 @@ class LightWorker:
         """Single LLM generation call"""
         tools_schema = self.registry.get_tools_prompt()
         
+        # Inject harvested skills if available
+        from memory.skill_harvester import get_harvester
+        skills_context = get_harvester().get_skills_for_prompt(task)
+        
         system_prompt = AGENT_SYSTEM_PROMPT.format(
             tools_schema=tools_schema,
             workspace="sandbox",
             memory_context=self.memory_context
         )
         
+        # Append skills to system prompt if available
+        if skills_context:
+            system_prompt += skills_context
+        
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": task}
         ]
         
-        return self.llm.chat(messages, temp=self.temperature)
+        # Use worker_id as slot_id for slot affinity (prevents context thrashing)
+        return self.llm.chat(messages, temp=self.temperature, slot_id=self.worker_id)
     
     def _extract_code(self, response: str) -> Optional[str]:
         """Extract Python code from ```python blocks"""
@@ -140,8 +150,11 @@ class LightWorker:
         return self.registry.execute_tool("python_exec", code=code)
     
     def _refine_with_error(self, task: str, code: str, error: str) -> str:
-        """Ask LLM to fix code based on execution error"""
-        prompt = f"""The following Python code failed with an error. Fix it.
+        """Ask LLM to fix code based on execution error - with semantic translation"""
+        # Translate technical error to semantic instruction
+        semantic_error = format_for_llm(error)
+        
+        prompt = f"""The following Python code failed. Fix it based on the error analysis.
 
 ORIGINAL TASK: {task[:200]}
 
@@ -150,9 +163,9 @@ CODE THAT FAILED:
 {code}
 ```
 
-ERROR:
-{error[:300]}
+{semantic_error}
 
 Provide the CORRECTED code in a ```python block. Only fix the error, keep the logic."""
         
-        return self.llm.generate(prompt, temp=self.temperature)
+        # Use same slot as the worker for cache affinity
+        return self.llm.generate(prompt, temp=self.temperature, slot_id=self.worker_id)

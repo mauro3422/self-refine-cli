@@ -21,7 +21,7 @@ class Aggregator:
         self.llm = LLMClient()
     
     def aggregate(self, responses: List[WorkerResponse], task: str) -> WorkerResponse:
-        """Aggregate responses - PRIORITIZE verified (code-tested) responses"""
+        """Aggregate responses - PRIORITIZE verified, PRUNE weak candidates (ToT)"""
         if not responses:
             raise ValueError("No responses to aggregate")
             
@@ -36,64 +36,88 @@ class Aggregator:
             best = min(verified, key=lambda r: r.attempts)
             print(f"    ✅ Using verified response from Worker-{best.worker_id} ({len(verified)}/{len(responses)} verified)")
             return best
+        
+        # TREE OF THOUGHTS: Evaluate and PRUNE weak candidates
+        print(f"    🌳 ToT Pruning: Evaluating {len(responses)} candidates...")
+        scored = self._evaluate_and_prune(responses, task)
+        
+        if len(scored) == 1:
+            # Only one candidate after pruning - use it directly
+            best = scored[0]
+            print(f"    ✅ Selected Worker-{best['response'].worker_id} (score: {best['score']})")
+            return best['response']
+        
+        # Still multiple candidates - use best one (no synthesis needed)
+        best = max(scored, key=lambda x: x['score'])
+        print(f"    ✅ Best candidate: Worker-{best['response'].worker_id} (score: {best['score']})")
+        return best['response']
+    
+    def _evaluate_and_prune(self, responses: List[WorkerResponse], task: str) -> List[Dict]:
+        """
+        TREE OF THOUGHTS: Quick-evaluate each candidate and prune weak ones.
+        Returns list of {response, score} for survivors.
+        """
+        scored = []
+        
+        for r in responses:
+            score = self._quick_score(r, task)
+            scored.append({'response': r, 'score': score})
+            print(f"      Worker-{r.worker_id}: score={score}")
+        
+        # Sort by score descending
+        scored.sort(key=lambda x: x['score'], reverse=True)
+        
+        # PRUNE: Keep only top candidate(s)
+        # If best score is significantly higher, keep only it
+        if len(scored) >= 2:
+            best_score = scored[0]['score']
+            second_score = scored[1]['score']
             
-        # No verified responses - fall back to LLM synthesis
-        print(f"    ⚠️ No verified responses, synthesizing from {len(responses)} candidates")
+            # If clear winner (>3 points difference), prune others
+            if best_score - second_score > 3:
+                print(f"    ✂️ Pruned {len(scored)-1} weak candidates")
+                return [scored[0]]
+        
+        # Return top 2 if close scores (for potential synthesis)
+        return scored[:2]
+    
+    def _quick_score(self, response: WorkerResponse, task: str) -> int:
+        """
+        Quick heuristic scoring without LLM call.
+        Used for ToT pruning - fast but approximate.
+        """
+        score = 5  # Base score
+        
+        # +5 if has valid tool call
+        if response.tool_call:
+            score += 5
+            tool = response.tool_call.get('tool', '')
             
-        # Prepare context for aggregation
-        candidates_text = ""
-        for i, r in enumerate(responses):
-            tool_status = f"(Tool: {r.tool_call.get('tool')})" if r.tool_call else "(No tool)"
-            candidates_text += f"\n--- CANDIDATE {i+1} {tool_status} ---\n{r.raw_response[:800]}\n"
+            # +3 if tool matches task type
+            task_lower = task.lower()
+            if 'python' in tool and ('implement' in task_lower or 'code' in task_lower or 'function' in task_lower):
+                score += 3
+            if 'file' in tool and ('create' in task_lower or 'write' in task_lower):
+                score += 3
         
-        # Get list of VALID tools
-        registry = get_registry()
-        valid_tools = list(registry._tools.keys())
-        tools_list = ", ".join(valid_tools)
-            
-        prompt = f"""Select or synthesize the best tool call from these candidates.
-
-TASK: {task}
-
-VALID TOOLS (use ONLY these exact names):
-{tools_list}
-
-CANDIDATES:
-{candidates_text}
-
-CRITICAL RULES:
-1. The "tool" field MUST be one of: {tools_list}
-2. Do NOT use module names like 're', 'ast', 'json' as tools - these are NOT valid.
-3. If candidates show Python code, use "python_exec" with the code.
-4. If candidates show file creation, use "write_file" with path and content.
-5. Output ONLY the JSON, no explanations.
-
-Output EXACTLY this format:
-```json
-{{"tool": "valid_tool_name", "params": {{...}}}}
-```"""
-
-        # Generate synthesized response
-        print(f"    → Synthesizing {len(responses)} candidates...")
-        agg_start = time.time()
-        synthesized_text = self.llm.generate(prompt, temp=0.3)
-        duration = time.time() - agg_start
+        # +3 if has code block
+        if '```python' in response.raw_response:
+            score += 3
         
-        # Extract new tool call
-        tool_call = extract_tool_call(synthesized_text)
+        # +2 if reasonable length (not too short, not too long)
+        length = len(response.raw_response)
+        if 200 < length < 2000:
+            score += 2
         
-        # SMART VALIDATION: If hallucinated tool, extract real code from workers
-        if tool_call:
-            self._validate_and_fix_tool(tool_call, responses, synthesized_text)
+        # +2 if fewer attempts (cleaner first try)
+        if response.attempts == 1:
+            score += 2
         
-        # Return as a specialized WorkerResponse
-        return WorkerResponse(
-            worker_id=999,  # ID for aggregator
-            raw_response=synthesized_text,
-            tool_call=tool_call,
-            duration=duration,
-            temperature=0.0
-        )
+        # -3 if mentions error or failure
+        if 'error' in response.raw_response.lower() or 'failed' in response.raw_response.lower():
+            score -= 3
+        
+        return max(0, min(25, score))  # Clamp to 0-25
     
     def _validate_and_fix_tool(self, tool_call: Dict, responses: List[WorkerResponse], 
                                 synthesized_text: str) -> None:

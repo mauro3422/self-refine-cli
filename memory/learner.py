@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from core.llm_client import LLMClient
 from memory.base import get_memory
 from memory.evolution import get_evolution
+from memory.skill_harvester import get_harvester
 
 
 class MemoryLearner:
@@ -35,10 +36,12 @@ class MemoryLearner:
         success = final_score >= 18 and iterations <= 2
         improved = final_score > initial_score
         
-        # NEW: Learn from verified workers (success patterns)
+        # NEW: Learn from verified workers (success patterns + skills)
         success_patterns = []
         if workers_data:
             success_patterns = self._learn_success_patterns(task, workers_data)
+            # Also harvest executable skills from verified code
+            self._harvest_skills_from_workers(task, workers_data)
         
         # Build analysis prompt with workers data
         prompt = self._build_analysis_prompt(
@@ -127,21 +130,30 @@ class MemoryLearner:
         response_preview = best.get('response', '')[:300]
         tool_used = best.get('tool', 'python_exec')
         
-        # Extract pattern using LLM
-        prompt = f"""Extract a SUCCESS PATTERN from this verified code.
+        # Extract pattern using LLM - IMPROVED PROMPT for abstraction
+        prompt = f"""Extract an ABSTRACT success pattern from this verified code.
 
-TASK: {task[:100]}
+TASK TYPE: {task[:80]}
 TOOL: {tool_used}
-WORKING CODE:
-{response_preview}
+CODE PREVIEW: {response_preview[:200]}
 
-Output ONE generalized pattern that worked. Format:
-PATTERN: For [task type], use [approach] with [key_technique]
+INSTRUCTIONS:
+1. Identify the HIGH-LEVEL APPROACH, not the specific code
+2. Focus on the STRATEGY that made it work
+3. NO code literals, NO regex, NO specific values
 
-RULES:
-- Generalize! Don't use specific names, use [function], [variable], [file]
-- Focus on the APPROACH that made it work
-- Keep it under 100 chars
+GOOD EXAMPLES:
+- "For validation tasks, use regex with pattern matching and edge case testing"
+- "For file operations, check existence first then read/write with error handling"
+- "For parsing tasks, use try-except with fallback and input sanitization"
+
+BAD EXAMPLES (DO NOT DO):
+- "Use regex r'^[a-z]+$'" ← Too specific!
+- "Import re module and use match()" ← Just code!
+- "def validate(x): return bool(...)" ← This is code, not a pattern!
+
+Output ONE line in this format:
+PATTERN: For [task category], use [strategy] with [key technique]
 
 PATTERN:"""
         
@@ -176,6 +188,45 @@ PATTERN:"""
             print(f"  [DEBUG] Pattern extraction error: {e}")
         
         return []
+    
+    def _harvest_skills_from_workers(self, task: str, workers_data: List[Dict]):
+        """
+        NEW: Harvest executable functions from verified workers as reusable skills.
+        Uses DreamCoder-inspired skill extraction.
+        """
+        verified = [w for w in workers_data if w.get('verified', False)]
+        if not verified:
+            return
+        
+        harvester = get_harvester()
+        total_skills = 0
+        
+        for worker in verified:
+            # Get the actual code from the worker
+            code = self._extract_code_from_worker(worker)
+            if code and len(code) > 50:  # Skip trivial code
+                skills = harvester.harvest_from_code(code, task)
+                total_skills += len(skills)
+        
+        if total_skills > 0:
+            print(f"  🔧 Harvested {total_skills} skills from {len(verified)} verified workers")
+    
+    def _extract_code_from_worker(self, worker: Dict) -> Optional[str]:
+        """Extract Python code from worker response"""
+        import re
+        response = worker.get('response', '')
+        
+        # Try to find code block
+        match = re.search(r'```python\s*\n(.+?)\n```', response, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        
+        # Try JSON format
+        match = re.search(r'"code"\s*:\s*"([^"]+)"', response)
+        if match:
+            return match.group(1).replace('\\n', '\n')
+        
+        return None
     
     def _build_analysis_prompt(self, task, initial, final, iterations, tools, errors, workers_data=None):
         """Build a strict, concise prompt that generates actionable rules"""

@@ -27,6 +27,8 @@ Step 2: Output ONE tool call:
 - Use ONLY tools from the list above. Do NOT invent tools.
 - If you need to see a file first, use `read_file` or `list_dir`.
 - ONE tool per response.
+- CODE MUST BE SELF-CONTAINED: Do NOT import from project files (like `from utils.X import Y`). Use only standard library imports (re, json, os, etc.) or define functions inline.
+- If task mentions "create file X", implement the logic directly in your code, don't try to import X.
 
 {memory_context}
 """
