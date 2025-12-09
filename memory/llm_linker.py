@@ -3,6 +3,7 @@
 
 from typing import List, Dict, Optional, Tuple
 from core.llm_client import LLMClient
+from config.settings import MEMORY_SLOT
 from memory.base import get_memory
 
 
@@ -88,7 +89,7 @@ LESSONS:
 Return ONLY the numbers of the 3 most relevant, e.g: 2,5,1
 RANKING:"""
 
-        response = self.llm.generate(prompt, temp=0.3, slot_id=-1)
+        response = self.llm.generate(prompt, temp=0.3, slot_id=MEMORY_SLOT)
         
         # Parse ranking
         return self._parse_ranking(response, candidates)
@@ -139,7 +140,7 @@ Only include connections score 5+.
 
 CONNECTIONS:"""
 
-        response = self.llm.generate(prompt, temp=0.3, slot_id=-1)
+        response = self.llm.generate(prompt, temp=0.3, slot_id=MEMORY_SLOT)
         
         return self._parse_links(response, existing_memories)
     

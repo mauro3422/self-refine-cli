@@ -4,6 +4,7 @@
 
 from typing import Dict, List, Optional
 from core.llm_client import LLMClient
+from config.settings import MEMORY_SLOT
 from memory.base import get_memory
 from memory.evolution import get_evolution
 from memory.skill_harvester import get_harvester
@@ -49,7 +50,7 @@ class MemoryLearner:
             iterations, tool_results, errors, workers_data
         )
         
-        response = self.llm.generate(prompt, temp=0.3)
+        response = self.llm.generate(prompt, temp=0.3, slot_id=MEMORY_SLOT)
         
         # Extract structured lessons
         lessons = self._extract_lessons(response)
@@ -158,7 +159,7 @@ PATTERN: For [task category], use [strategy] with [key technique]
 PATTERN:"""
         
         try:
-            pattern = self.llm.generate(prompt, temp=0.2)
+            pattern = self.llm.generate(prompt, temp=0.2, slot_id=MEMORY_SLOT)
             pattern = pattern.strip()
             
             # DEBUG: Log what LLM returned

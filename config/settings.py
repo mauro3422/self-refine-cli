@@ -39,6 +39,7 @@ AUTO_SUCCESS_SCORE = 10         # Score >= this = partial success
 # ===================
 # Memory System
 # ===================
+MEMORY_SLOT = 3                 # Dedicated slot for LLMLinker/Evolution (keeps context warm)
 MEMORY_CACHE_SIZE = 100         # Max cached LLM evaluations
 MEMORY_MIN_IMPORTANCE = 5       # Min importance to retrieve
 MAX_SESSIONS_SAVED = 10         # How many session logs to keep

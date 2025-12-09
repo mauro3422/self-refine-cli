@@ -169,6 +169,7 @@ class SmartMemory:
         """Extract semantic keywords using LLM for better quality"""
         try:
             from core.llm_client import LLMClient
+            from config.settings import MEMORY_SLOT
             llm = LLMClient()
             
             prompt = f"""Extract 3-5 semantic keywords from this lesson. Output ONLY comma-separated keywords, nothing else.
@@ -177,7 +178,7 @@ LESSON: {text[:300]}
 
 KEYWORDS:"""
             
-            response = llm.generate(prompt, temp=0.2)
+            response = llm.generate(prompt, temp=0.2, slot_id=MEMORY_SLOT)
             # Parse comma-separated keywords
             keywords = [k.strip().lower() for k in response.split(',') if k.strip()]
             return keywords[:5] if keywords else self._fallback_keywords(text)

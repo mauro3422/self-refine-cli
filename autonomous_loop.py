@@ -162,29 +162,64 @@ def _safe_parse(value_str: str):
     return value_str
 
 def generate_task(runner):
-    """Generate a meaningful task using the LLM itself."""
+    """Generate a task with ADAPTIVE DIFFICULTY based on performance history."""
+    from memory.adaptive_difficulty import get_difficulty_tracker
+    from memory.test_patterns import get_test_patterns
+    
+    tracker = get_difficulty_tracker()
+    pattern_learner = get_test_patterns()
+    
+    # Check if we should target a weakness category
+    should_target, weakness_category = tracker.should_target_weakness()
+    
+    # Get difficulty modifier
+    difficulty_modifier = tracker.get_difficulty_prompt_modifier()
+    
+    # Build category selection
+    target_category = None
+    if should_target and weakness_category:
+        # Target the weak category
+        category_instruction = f"FOCUS ON: {weakness_category.upper()} category (this is a weakness area that needs practice)"
+        target_category = weakness_category
+        log(f"🎯 Targeting weakness: {weakness_category}")
+    else:
+        # Normal random selection
+        category_instruction = (
+            "PICK ONE category randomly from: "
+            "1) STRING: validate email, reverse words, count vowels, check palindrome "
+            "2) MATH: fibonacci nth, is_prime, factorial, sum of digits "
+            "3) LIST: find duplicates, merge sorted lists, remove duplicates "
+            "4) DICT: word frequency, group by key, invert dictionary "
+            "5) VALIDATION: is_valid_url, parse_date, validate_phone "
+        )
+    
+    # Get learned test pattern suggestions
+    test_suggestions = ""
+    if target_category:
+        patterns = pattern_learner.get_patterns_for_category(target_category, n=2)
+        if patterns:
+            test_suggestions = "\n\nLEARNED TEST PATTERNS (use similar patterns):\n"
+            for p in patterns:
+                test_suggestions += f"- Input type: {p['input_type']}, Output type: {p['output_type']}\n"
+            log(f"📚 Using {len(patterns)} learned test patterns")
+    
     prompt = (
-        "Generate a CODING task that requires implementing a `solve(input)` function. "
-        "PICK ONE category randomly from: "
-        "1) STRING: validate email, reverse words, count vowels, check palindrome "
-        "2) MATH: fibonacci nth, is_prime, factorial, sum of digits "
-        "3) LIST: find duplicates, merge sorted lists, remove duplicates "
-        "4) DICT: word frequency, group by key, invert dictionary "
-        "5) VALIDATION: is_valid_url, parse_date, validate_phone "
-        "\n\nFORMAT (REQUIRED):\n"
-        "Task: [description]\n"
-        "Test cases:\n"
-        "- solve('input1') -> expected1\n"
-        "- solve('input2') -> expected2\n"
-        "- solve('input3') -> expected3\n"
-        "\nReturn ONLY the formatted task with 3 test cases."
+        f"Generate a CODING task that requires implementing a `solve(input)` function.\n\n"
+        f"{difficulty_modifier}\n\n"
+        f"{category_instruction}{test_suggestions}\n\n"
+        f"FORMAT (REQUIRED):\n"
+        f"Category: [category_name]\n"
+        f"Task: [description]\n"
+        f"Test cases:\n"
+        f"- solve('input1') -> expected1\n"
+        f"- solve('input2') -> expected2\n"
+        f"- solve('input3') -> expected3\n"
+        f"\nReturn ONLY the formatted task with 3 test cases."
     )
     
     try:
-        # We use a raw LLM call or a quick runner call to get the task
-        # creating a light worker for this
         client = LLMClient()
-        task = client.generate(prompt, temp=TEMPERATURE)  # Use settings
+        task = client.generate(prompt, temp=TEMPERATURE)
         return task.strip()
     except Exception as e:
         log(f"⚠️ Task Generation Failed: {e}. Fallback to random.")
@@ -294,6 +329,33 @@ def main():
                             log(f"📝 Learned {learn_result['learned']} test patterns")
                     except Exception as e:
                         log(f"⚠️ Pattern learning error: {e}")
+                
+                # Record result for adaptive difficulty
+                try:
+                    from memory.adaptive_difficulty import get_difficulty_tracker
+                    tracker = get_difficulty_tracker()
+                    
+                    # Extract category from task (look for "Category:" line)
+                    import re
+                    category_match = re.search(r'Category:\s*(\w+)', task, re.IGNORECASE)
+                    category = category_match.group(1).lower() if category_match else "general"
+                    
+                    # Determine success
+                    is_success = score >= AUTO_SUCCESS_SCORE
+                    
+                    # Record to tracker
+                    track_result = tracker.record_result(
+                        category=category,
+                        difficulty=tracker.get_current_difficulty(),
+                        success=is_success,
+                        score=score,
+                        verified=result.get('verification_passed', False)
+                    )
+                    
+                    if track_result.get('adjustment'):
+                        log(f"📊 Difficulty adjustment: {track_result['adjustment']}")
+                except Exception as e:
+                    log(f"⚠️ Difficulty tracking error: {e}")
                 
                 task_count += 1
                 
