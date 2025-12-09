@@ -76,8 +76,13 @@ class PoetiqRunner:
         register_verify_tools()
         print("✅ All tools registered")
     
-    def run(self, task: str) -> Dict[str, Any]:
-        """Run full Poetiq + Self-Refine pipeline"""
+    def run(self, task: str, test_cases: list = None) -> Dict[str, Any]:
+        """Run full Poetiq + Self-Refine pipeline
+        
+        Args:
+            task: The task description
+            test_cases: Optional list of {input, expected} dicts for verification
+        """
         start_time = time.time()
         logger = new_session()
         logger.set_task(task)
@@ -157,17 +162,18 @@ class PoetiqRunner:
             )
         else:
             # Run SelfRefiner for non-verified or low-score responses
-            test_cases = []
-            if tool_name == "python_exec" or "```python" in winner.raw_response:
-                test_cases = self.refiner.generate_test_cases(task, winner.raw_response)
-                if test_cases:
-                    print(f"  🧪 Generated {len(test_cases)} test cases for verification")
+            # Use external test_cases if provided, otherwise generate
+            refine_test_cases = test_cases if test_cases else []
+            if not refine_test_cases and (tool_name == "python_exec" or "```python" in winner.raw_response):
+                refine_test_cases = self.refiner.generate_test_cases(task, winner.raw_response)
+            if refine_test_cases:
+                print(f"  🧪 Using {len(refine_test_cases)} test cases for verification")
             
             refined = self.refiner.refine(
                 winner.raw_response, 
                 task, 
                 [tool_name] if tool_name else [],
-                test_cases=test_cases
+                test_cases=refine_test_cases
             )
             
             # Calculate score delta

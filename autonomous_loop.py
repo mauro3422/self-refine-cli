@@ -4,6 +4,7 @@ import sys
 import random
 import os
 import json
+import re
 from datetime import datetime
 
 # Force UTF-8 for Poetiq emojis
@@ -70,18 +71,51 @@ def load_checkpoint() -> dict:
         pass
     return {"task_count": 0, "last_task": ""}
 
+def parse_test_cases(task_text: str) -> list:
+    """Extract test cases from task description.
+    
+    Looks for patterns like:
+    - solve('input') -> expected
+    - solve("input") -> expected
+    """
+    test_cases = []
+    # Pattern: solve('...') -> ... or solve("...") -> ...
+    pattern = r"solve\(['\"](.+?)['\"]\)\s*->\s*(.+)"
+    for match in re.finditer(pattern, task_text):
+        input_val = match.group(1)
+        expected_raw = match.group(2).strip()
+        
+        # Try to parse expected value
+        try:
+            # Handle strings, ints, bools, etc.
+            expected = eval(expected_raw)
+        except:
+            expected = expected_raw
+        
+        test_cases.append({
+            "input": input_val,
+            "expected": expected
+        })
+    
+    return test_cases[:5]  # Max 5 test cases
+
 def generate_task(runner):
     """Generate a meaningful task using the LLM itself."""
     prompt = (
-        "Generate a CODING task for a Python CLI project. "
+        "Generate a CODING task that requires implementing a `solve(input)` function. "
         "PICK ONE category randomly from: "
-        "1) FILE OPERATIONS: read/write files, parse JSON/CSV, directory traversal "
-        "2) DATA PROCESSING: string manipulation, list/dict transformations, sorting algorithms "
-        "3) MATH/ALGORITHMS: implement fibonacci, prime checker, string patterns "
-        "4) SYSTEM TOOLS: environment variables, path handling, command execution "
-        "5) VALIDATION: email, URL, phone, date format validators "
-        "The task MUST be self-contained with testable output. "
-        "Return ONLY the task description in 1-2 sentences."
+        "1) STRING: validate email, reverse words, count vowels, check palindrome "
+        "2) MATH: fibonacci nth, is_prime, factorial, sum of digits "
+        "3) LIST: find duplicates, merge sorted lists, remove duplicates "
+        "4) DICT: word frequency, group by key, invert dictionary "
+        "5) VALIDATION: is_valid_url, parse_date, validate_phone "
+        "\n\nFORMAT (REQUIRED):\n"
+        "Task: [description]\n"
+        "Test cases:\n"
+        "- solve('input1') -> expected1\n"
+        "- solve('input2') -> expected2\n"
+        "- solve('input3') -> expected3\n"
+        "\nReturn ONLY the formatted task with 3 test cases."
     )
     
     try:
@@ -162,12 +196,17 @@ def main():
             task = generate_task(runner)
             log(f"📋 Generated Task: {task}")
             
+            # 1.5 Extract test cases from task
+            test_cases = parse_test_cases(task)
+            if test_cases:
+                log(f"🧪 Extracted {len(test_cases)} test cases for verification")
+            
             # 2. Execute
             start_time = time.time()
             session_id = f"auto_{task_count}_{int(start_time)}"
             monitor.log_task_start(task, session_id)
             try:
-                result = runner.run(task)
+                result = runner.run(task, test_cases=test_cases)
                 duration = time.time() - start_time
                 score = result.get('score', 0)
                 log(f"✅ Task Completed ({duration:.1f}s). Score: {score}")
