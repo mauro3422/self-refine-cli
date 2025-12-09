@@ -136,7 +136,8 @@ class PoetiqRunner:
         print(f"  📈 Pre-refine score: {pre_score}/25")
         
         # OPTIMIZATION: Skip SelfRefiner if workers already verified code AND score is good
-        skip_refiner = winner_verified and pre_score >= 15
+        # Threshold 20/25 = 80% ensures high quality before bypassing refinement
+        skip_refiner = winner_verified and pre_score >= 20
         
         if skip_refiner:
             # Use winner response directly - code is already verified!

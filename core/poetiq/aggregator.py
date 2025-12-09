@@ -21,7 +21,7 @@ class Aggregator:
         self.llm = LLMClient()
     
     def aggregate(self, responses: List[WorkerResponse], task: str) -> WorkerResponse:
-        """Aggregate responses - PRIORITIZE verified, PRUNE weak candidates (ToT)"""
+        """Aggregate responses - PRIORITIZE verified, PRUNE weak candidates (ToT), FALLBACK if all fail"""
         if not responses:
             raise ValueError("No responses to aggregate")
             
@@ -49,8 +49,18 @@ class Aggregator:
         
         # Still multiple candidates - use best one (no synthesis needed)
         best = max(scored, key=lambda x: x['score'])
-        print(f"    ✅ Best candidate: Worker-{best['response'].worker_id} (score: {best['score']})")
-        return best['response']
+        best_response = best['response']
+        
+        # FALLBACK: If best score is very low, log warning
+        if best['score'] < 5:
+            print(f"    ⚠️ FALLBACK: All workers produced low-quality responses (best score: {best['score']})")
+            print(f"    ⚠️ Using Worker-{best_response.worker_id} as fallback - refiner will handle")
+            # Mark as fallback (checked by runner)
+            best_response.fallback_used = True
+        else:
+            print(f"    ✅ Best candidate: Worker-{best_response.worker_id} (score: {best['score']})")
+        
+        return best_response
     
     def _evaluate_and_prune(self, responses: List[WorkerResponse], task: str) -> List[Dict]:
         """

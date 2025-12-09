@@ -74,30 +74,92 @@ def load_checkpoint() -> dict:
 def parse_test_cases(task_text: str) -> list:
     """Extract test cases from task description.
     
-    Looks for patterns like:
-    - solve('input') -> expected
-    - solve("input") -> expected
+    Supports multiple input formats:
+    - solve('string') -> expected
+    - solve("string") -> expected
+    - solve(123) -> expected
+    - solve(-5) -> expected (negative numbers)
+    - solve(3.14) -> expected (floats)
+    - solve([1, 2, 3]) -> expected
+    - solve([[1,2],[3,4]]) -> expected (nested)
+    - solve({'key': 'value'}) -> expected
+    - solve(True) -> expected
+    - solve((1, 2)) -> expected (tuples)
     """
+    import ast
+    
     test_cases = []
-    # Pattern: solve('...') -> ... or solve("...") -> ...
-    pattern = r"solve\(['\"](.+?)['\"]\)\s*->\s*(.+)"
-    for match in re.finditer(pattern, task_text):
+    
+    # Pattern 1: String inputs - solve('...') or solve("...")
+    string_pattern = r"solve\(['\"](.+?)['\"]\)\s*->\s*(.+)"
+    for match in re.finditer(string_pattern, task_text):
         input_val = match.group(1)
         expected_raw = match.group(2).strip()
-        
-        # Try to parse expected value
-        try:
-            # Handle strings, ints, bools, etc.
-            expected = eval(expected_raw)
-        except:
-            expected = expected_raw
-        
-        test_cases.append({
-            "input": input_val,
-            "expected": expected
-        })
+        expected = _safe_parse(expected_raw)
+        test_cases.append({"input": input_val, "expected": expected})
     
-    return test_cases[:5]  # Max 5 test cases
+    # Pattern 2: Numeric inputs - solve(123), solve(-5), solve(3.14)
+    numeric_pattern = r"solve\((-?\d+\.?\d*)\)\s*->\s*(.+)"
+    for match in re.finditer(numeric_pattern, task_text):
+        input_raw = match.group(1)
+        expected_raw = match.group(2).strip()
+        
+        input_val = _safe_parse(input_raw)
+        expected = _safe_parse(expected_raw)
+        
+        if not any(tc["input"] == input_val for tc in test_cases):
+            test_cases.append({"input": input_val, "expected": expected})
+    
+    # Pattern 3: Boolean inputs - solve(True), solve(False)
+    bool_pattern = r"solve\((True|False)\)\s*->\s*(.+)"
+    for match in re.finditer(bool_pattern, task_text):
+        input_raw = match.group(1)
+        expected_raw = match.group(2).strip()
+        
+        input_val = _safe_parse(input_raw)
+        expected = _safe_parse(expected_raw)
+        
+        if not any(tc["input"] == input_val for tc in test_cases):
+            test_cases.append({"input": input_val, "expected": expected})
+    
+    # Pattern 4: List/dict/tuple inputs - solve([...]), solve({...}), solve((...))
+    # Uses balanced bracket matching
+    complex_pattern = r"solve\((\[.*?\]|\{.*?\}|\(.*?\))\)\s*->\s*(.+)"
+    for match in re.finditer(complex_pattern, task_text):
+        input_raw = match.group(1)
+        expected_raw = match.group(2).strip()
+        
+        input_val = _safe_parse(input_raw)
+        expected = _safe_parse(expected_raw)
+        
+        if not any(tc["input"] == input_val for tc in test_cases):
+            test_cases.append({"input": input_val, "expected": expected})
+    
+    return test_cases[:8]  # Increased max to 8 test cases
+
+
+def _safe_parse(value_str: str):
+    """Safely parse a string representation to Python value using ast.literal_eval."""
+    import ast
+    
+    value_str = value_str.strip()
+    
+    # Try ast.literal_eval first (safe for literals)
+    try:
+        return ast.literal_eval(value_str)
+    except (ValueError, SyntaxError):
+        pass
+    
+    # Handle common edge cases
+    if value_str.lower() == 'true':
+        return True
+    if value_str.lower() == 'false':
+        return False
+    if value_str.lower() == 'none':
+        return None
+    
+    # Return as string if can't parse
+    return value_str
 
 def generate_task(runner):
     """Generate a meaningful task using the LLM itself."""
@@ -221,6 +283,17 @@ def main():
                     verified=result.get('verification_passed', False),
                     skipped_refine=result.get('skipped_refine', False)
                 )
+                
+                # Learn test patterns from successful verifications
+                if result.get('verification_passed', False) and test_cases:
+                    try:
+                        from memory.test_patterns import get_test_patterns
+                        pattern_learner = get_test_patterns()
+                        learn_result = pattern_learner.learn_from_success(task, test_cases)
+                        if learn_result.get('learned', 0) > 0:
+                            log(f"📝 Learned {learn_result['learned']} test patterns")
+                    except Exception as e:
+                        log(f"⚠️ Pattern learning error: {e}")
                 
                 task_count += 1
                 
