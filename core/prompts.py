@@ -41,17 +41,20 @@ TASK: {user_input}
 RESPONSE: {response}
 TOOLS USED: {tools_used}
 
-SCORING CRITERIA:
-- 20-25: Task completed correctly with valid tool call
-- 15-19: Good approach but minor issues
-- 10-14: Partial completion or wrong parameters
-- 5-9: Wrong tool but reasonable attempt
-- 0-4: No valid tool or completely wrong
+SCORING CRITERIA (be generous if the code works):
+- 23-25: Perfect - tool used correctly, output clear, no issues
+- 20-22: Excellent - minor style issues but functionally correct
+- 17-19: Good - works but could be improved
+- 14-16: Acceptable - partial solution
+- 10-13: Weak - significant issues
+- 0-9: Failed
+
+IMPORTANT: If the code would execute and produce correct output, score AT LEAST 20.
 
 You MUST output exactly this format at the end:
 TOTAL_SCORE: [number]/25
 
-Example: TOTAL_SCORE: 18/25"""
+Example: TOTAL_SCORE: 22/25"""
 
 # Minimal refine prompt
 REFINE_PROMPT = """Fix this:
