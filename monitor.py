@@ -9,6 +9,8 @@ Usage:
     python monitor.py memory     - Show memory summary
     python monitor.py recent     - Show recently modified files
     python monitor.py health     - Run health check on all systems
+    python monitor.py metrics    - Show live metrics dashboard
+    python monitor.py adaptive   - Show adaptive difficulty stats
 """
 import sys
 import os
@@ -180,6 +182,114 @@ def cmd_health():
     else:
         print(f"   ⚠️ No log file yet")
 
+def cmd_metrics():
+    """Show live metrics dashboard from monitoring.json"""
+    monitoring_file = "outputs/monitoring.json"
+    
+    if not os.path.exists(monitoring_file):
+        print("❌ No monitoring data yet. Run autonomous_loop.py first.")
+        return
+    
+    with open(monitoring_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    scores = data.get('metrics', {}).get('scores', [])
+    durations = data.get('metrics', {}).get('durations', [])
+    events = data.get('events', [])
+    
+    # Calculate stats
+    avg_score = sum(scores) / len(scores) if scores else 0
+    avg_duration = sum(durations) / len(durations) if durations else 0
+    min_score = min(scores) if scores else 0
+    max_score = max(scores) if scores else 0
+    
+    # Get session info
+    session_start = data.get('session_start', 'Unknown')
+    last_updated = data.get('last_updated', 'Unknown')
+    
+    print("\n" + "="*55)
+    print("📊 LIVE METRICS DASHBOARD")
+    print("="*55)
+    print(f"Session started: {session_start}")
+    print(f"Last updated:    {last_updated}")
+    print("-"*55)
+    print(f"Total tasks completed: {len(scores)}")
+    print(f"Average score:         {avg_score:.1f}/25")
+    print(f"Score range:           {min_score} - {max_score}")
+    print(f"Average duration:      {avg_duration:.1f}s")
+    print("-"*55)
+    
+    # Show last 5 tasks
+    print("\n📝 Recent Tasks:")
+    task_events = [e for e in events if e.get('type') == 'task_complete']
+    for i, evt in enumerate(task_events[-5:], 1):
+        details = evt.get('details', {})
+        print(f"  {i}. Score: {details.get('score', '?')}/25 | "
+              f"Duration: {details.get('duration', 0):.1f}s | "
+              f"Verified: {'✓' if details.get('verified') else '✗'}")
+    
+    # Trend indicator
+    if len(scores) >= 3:
+        recent_avg = sum(scores[-3:]) / 3
+        early_avg = sum(scores[:3]) / 3 if len(scores) >= 3 else recent_avg
+        trend = "📈 Improving" if recent_avg > early_avg else "📉 Declining" if recent_avg < early_avg else "➡️ Stable"
+        print(f"\nTrend: {trend} (early avg: {early_avg:.1f}, recent avg: {recent_avg:.1f})")
+    
+    print("="*55)
+
+def cmd_adaptive():
+    """Show adaptive difficulty stats"""
+    adaptive_file = "data/adaptive_learning.json"
+    
+    if not os.path.exists(adaptive_file):
+        print("❌ No adaptive learning data yet.")
+        return
+    
+    with open(adaptive_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    current_level = data.get('current_difficulty', 2)
+    level_names = {1: "Basic", 2: "Easy", 3: "Medium", 4: "Hard", 5: "Expert"}
+    
+    print("\n" + "="*55)
+    print("🎯 ADAPTIVE DIFFICULTY STATS")
+    print("="*55)
+    print(f"Current Level: {current_level}/5 ({level_names.get(current_level, '?')})")
+    print(f"Last Updated:  {data.get('last_updated', 'Unknown')}")
+    print("-"*55)
+    
+    # Performance by category
+    print("\n📊 Performance by Category:")
+    performance = data.get('performance', {})
+    for cat, levels in performance.items():
+        total = sum(l.get('total', 0) for l in levels.values())
+        success = sum(l.get('success', 0) for l in levels.values())
+        rate = success / total * 100 if total > 0 else 0
+        scores = []
+        for l in levels.values():
+            scores.extend(l.get('scores', []))
+        avg = sum(scores) / len(scores) if scores else 0
+        print(f"  {cat.upper():12} | {success}/{total} ({rate:.0f}%) | Avg: {avg:.1f}")
+    
+    # Weaknesses
+    weaknesses = data.get('weakness_categories', [])
+    if weaknesses:
+        print(f"\n⚠️ Weakness Categories:")
+        for w in weaknesses:
+            print(f"  - {w['category']}: {w['success_rate']:.0%} success rate")
+    else:
+        print("\n✅ No weaknesses detected!")
+    
+    # Recent history
+    history = data.get('history', [])
+    if history:
+        print(f"\n📝 Last 5 Tasks:")
+        for h in history[-5:]:
+            status = "✓" if h.get('success') else "✗"
+            print(f"  {status} {h.get('category', '?'):10} | Score: {h.get('score', '?')} | Verified: {'✓' if h.get('verified') else '✗'}")
+    
+    print("="*55)
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -205,9 +315,14 @@ def main():
         cmd_recent()
     elif cmd == 'health':
         cmd_health()
+    elif cmd == 'metrics':
+        cmd_metrics()
+    elif cmd == 'adaptive':
+        cmd_adaptive()
     else:
         print(f"Unknown command: {cmd}")
         print(__doc__)
 
 if __name__ == "__main__":
     main()
+
