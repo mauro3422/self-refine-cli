@@ -64,32 +64,63 @@ The result: an agent that **improves itself over time** without human interventi
 
 ## 🚀 Quick Start
 
-### 1. Start the llama.cpp Server
+### Prerequisites
+
+- **Python 3.10+**
+- **GPU with Vulkan support** (tested on AMD RX 6600, NVIDIA works too)
+- **16GB+ RAM** recommended
+- **[llama.cpp server](https://github.com/ggerganov/llama.cpp)** running locally
+
+### 1. Clone & Install
 
 ```bash
-# Windows
-start_server.bat
+# Clone the repository
+git clone https://github.com/mauro3422/self-refine-cli.git
+cd self-refine-cli
 
-# Linux/Mac
-./start_server.sh
+# Create virtual environment (recommended)
+python -m venv venv
+venv\Scripts\activate   # Windows
+# source venv/bin/activate  # Linux/Mac
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-### 2. Run Autonomous Mode
+### 2. Download & Start LLM Server
 
 ```bash
-# Let the agent teach itself continuously
+# Download a model (example: Qwen2.5-Coder-7B)
+# Place in models/ folder
+
+# Start llama.cpp server with Vulkan GPU acceleration
+# Windows:
+scripts\start_llm.bat
+
+# Linux/Mac:
+# ./llama.cpp/build/bin/llama-server -m models/your-model.gguf -c 32768 --port 8080
+```
+
+### 3. Run the Agent
+
+```bash
+# Autonomous mode - let the agent teach itself
 python autonomous_loop.py
-```
 
-### 3. Or Run Single Tasks
-
-```bash
-# Interactive mode
+# Interactive mode - give tasks directly
 python main.py
 
-# Direct task
+# Single task with Poetiq pipeline
 python run_test.py "create a function that reverses a string" --poetiq
 ```
+
+### 4. Monitor (Optional)
+
+```bash
+# Launch web dashboard at http://localhost:5000
+python -m ui.dashboard
+```
+
 
 ---
 
@@ -363,18 +394,30 @@ All file operations are sandboxed:
 
 ## 📋 Requirements
 
+**Python Packages** (see `requirements.txt`):
 ```
-Python 3.10+
-openai
-chromadb
-networkx
-requests
+requests>=2.28.0
+openai>=1.0.0
+chromadb>=0.4.0
+pandas>=2.0.0
+numpy>=1.24.0
+networkx>=3.0
+flask>=2.3.0
 ```
 
 **Hardware:**
-- GPU with Vulkan support (tested on AMD RX 6600)
+- GPU with Vulkan/CUDA support (tested on AMD RX 6600)
 - 16GB+ RAM recommended
-- llama.cpp server running
+- 50GB+ disk space for models
+
+**LLM Server:**
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) compiled with Vulkan/CUDA
+- Recommended model: Qwen2.5-Coder-7B-Instruct (Q4_K_M or Q5_K_M)
+
+**Troubleshooting:**
+- If ChromaDB fails: `pip install chromadb --upgrade`
+- If GPU not detected: Check Vulkan/CUDA drivers
+- If port 8080 busy: Change port in `config/settings.py`
 
 ---
 
