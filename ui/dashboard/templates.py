@@ -163,6 +163,39 @@ DASHBOARD_HTML = """
         </div>
         
         <div class="grid">
+            <!-- TREND CARD - New -->
+            <div class="card full-width" style="background: linear-gradient(135deg, rgba(0,212,255,0.1), rgba(0,255,136,0.1));">
+                <h2>📊 Performance Trends</h2>
+                <div style="display: flex; gap: 40px; align-items: center; margin: 20px 0;">
+                    <div style="flex: 1;">
+                        <div style="font-size: 3rem; letter-spacing: 3px; font-family: monospace;" id="sparkline">▁▂▃▄▅▆▇█</div>
+                        <div style="color: #888; font-size: 0.8rem; margin-top: 5px;">Last 10 Sessions</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div id="trend-direction" style="font-size: 4rem;">→</div>
+                        <div id="trend-delta" style="font-size: 1.2rem; color: #00ff88;">+0.0</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="graph-stat">
+                            <div class="graph-stat-value" id="current-score">-</div>
+                            <div class="stat-label">Current</div>
+                        </div>
+                        <div class="graph-stat">
+                            <div class="graph-stat-value" id="avg-all-time">-</div>
+                            <div class="stat-label">All-Time Avg</div>
+                        </div>
+                        <div class="graph-stat">
+                            <div class="graph-stat-value" id="best-score">-</div>
+                            <div class="stat-label">Best Score</div>
+                        </div>
+                        <div class="graph-stat">
+                            <div class="graph-stat-value" id="trend-sessions">-</div>
+                            <div class="stat-label">Total Sessions</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card">
                 <h2>📈 Performance</h2>
                 <div class="graph-stats">
@@ -311,8 +344,30 @@ DASHBOARD_HTML = """
             }
         }
         
+        function loadTrends() {
+            fetch('/api/trends')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('sparkline').textContent = data.sparkline || '─────────';
+                    document.getElementById('trend-direction').textContent = data.direction_icon || '→';
+                    
+                    const delta = data.delta || 0;
+                    const deltaEl = document.getElementById('trend-delta');
+                    deltaEl.textContent = (delta >= 0 ? '+' : '') + delta;
+                    deltaEl.style.color = delta >= 0 ? '#00ff88' : '#ff6b6b';
+                    
+                    document.getElementById('current-score').textContent = data.current_score || '-';
+                    document.getElementById('avg-all-time').textContent = data.avg_all_time || '-';
+                    document.getElementById('best-score').textContent = data.best_score || '-';
+                    document.getElementById('trend-sessions').textContent = data.total_sessions || '-';
+                })
+                .catch(e => console.log('Trends not available:', e));
+        }
+        
         refresh();
-        setInterval(refresh, 2000);
+        loadTrends();
+        setInterval(refresh, 10000);  // Refresh every 10 seconds
+        setInterval(loadTrends, 10000);
     </script>
 </body>
 </html>

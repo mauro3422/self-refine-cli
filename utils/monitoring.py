@@ -124,6 +124,97 @@ class MonitoringLogger:
         
         return f"{icon} Trend: {curr_score:.1f} (vs {hist_score:.1f} avg)"
     
+    def get_score_history(self, n: int = 10) -> List[float]:
+        """Get last N session scores for sparkline"""
+        history = self._load_history()
+        sessions = history.get("sessions", [])
+        scores = [s["avg_score"] for s in sessions[-n:] if s.get("avg_score", 0) > 0]
+        return scores
+    
+    @staticmethod
+    def generate_sparkline(values: List[float], max_value: float = 25.0) -> str:
+        """
+        Generate ASCII sparkline from values.
+        Uses block characters: ▁▂▃▄▅▆▇█
+        """
+        if not values:
+            return "─" * 10
+            
+        chars = "▁▂▃▄▅▆▇█"
+        result = ""
+        
+        for val in values:
+            # Normalize to 0-1 range (assuming max score is 25)
+            normalized = min(max(val / max_value, 0), 1)
+            # Map to character index
+            idx = int(normalized * (len(chars) - 1))
+            result += chars[idx]
+        
+        return result
+    
+    def get_trend_summary(self) -> Dict[str, Any]:
+        """
+        Get comprehensive trend data for dashboard.
+        
+        Returns:
+            {
+                "sparkline": "▁▂▃▅▆▇",
+                "direction": "up" | "down" | "stable",
+                "direction_icon": "↑" | "↓" | "→",
+                "delta": +2.3,
+                "current_score": 21.5,
+                "avg_last_5": 20.1,
+                "avg_all_time": 19.2,
+                "total_sessions": 15,
+                "total_tasks": 47,
+                "best_score": 24.0,
+                "sessions": [...last 10...]
+            }
+        """
+        history = self._load_history()
+        current = self.get_summary()
+        sessions = history.get("sessions", [])
+        
+        scores = self.get_score_history(10)
+        sparkline = self.generate_sparkline(scores)
+        
+        # Calculate averages
+        avg_all_time = history.get("global_avg_score", 0)
+        avg_last_5 = sum(scores[-5:]) / len(scores[-5:]) if scores else 0
+        current_score = current.get("avg_score", 0)
+        
+        # Determine direction
+        delta = current_score - avg_all_time
+        if delta > 1.0:
+            direction = "up"
+            direction_icon = "↑"
+        elif delta < -1.0:
+            direction = "down"
+            direction_icon = "↓"
+        else:
+            direction = "stable"
+            direction_icon = "→"
+        
+        # Best score
+        best_score = max(scores) if scores else 0
+        
+        # Total tasks
+        total_tasks = sum(s.get("tasks", 0) for s in sessions)
+        
+        return {
+            "sparkline": sparkline,
+            "direction": direction,
+            "direction_icon": direction_icon,
+            "delta": round(delta, 1),
+            "current_score": round(current_score, 1),
+            "avg_last_5": round(avg_last_5, 1),
+            "avg_all_time": round(avg_all_time, 1),
+            "total_sessions": len(sessions),
+            "total_tasks": total_tasks,
+            "best_score": round(best_score, 1),
+            "sessions": sessions[-10:]  # Last 10 sessions for table
+        }
+
     def _calculate_health(self) -> str:
         """Calculate system health indicator"""
         if len(self.errors) == 0:

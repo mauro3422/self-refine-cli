@@ -75,6 +75,13 @@ def api_clear():
     clear_data_files()
     return jsonify({"status": "cleared"})
 
+@app.route('/api/trends')
+def api_trends():
+    """Get trend data for sparklines and historical analysis"""
+    from utils.monitoring import get_monitoring_logger
+    logger = get_monitoring_logger()
+    return jsonify(logger.get_trend_summary())
+
 def run_dashboard(port=5000, open_browser=True):
     """Run the dashboard server"""
     print(f"\n🧠 Memory Dashboard starting at http://localhost:{port}")
