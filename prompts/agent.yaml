@@ -33,35 +33,65 @@ system_prompt: |
   {memory_context}
 
 refine_prompt: |
-  Your previous attempt had issues. Fix them:
+  ## 🔧 ITERATION REQUIRED - Your previous attempt needs improvement
   
-  ORIGINAL TASK: {user_input}
-  TOOLS TRIED: {tools_used}
+  ### ORIGINAL TASK:
+  {user_input}
   
-  PROBLEMS FOUND:
+  ### WHAT YOU TRIED:
+  - Tools used: {tools_used}
+  - Previous approach: [based on feedback below]
+  
+  ### PROBLEMS FOUND:
   {feedback}
   
+  ### MEMORY CONTEXT (learn from past):
   {memory_context}
   
-  AVAILABLE TOOLS (use ONLY these exact names):
+  ### AVAILABLE TOOLS:
   {tools_schema}
   
-  FIXING INSTRUCTIONS:
-  1. Read the problems carefully
-  2. Identify the root cause (wrong tool? wrong params? logic error?)
-  3. Use EXACTLY the tool names from the schema above
-  4. Use EXACTLY the parameter names from the schema
-  5. Output valid JSON ONLY. NO COMMENTS inside JSON.
+  ---
   
-  CHECKLIST before responding:
-  - [ ] Tool name matches schema exactly?
-  - [ ] All required params included?
-  - [ ] Param names match schema exactly?
-  - [ ] JSON is valid (no trailing commas, no comments)?
+  ## 🧠 BEFORE YOU RESPOND, THINK:
   
-  Your corrected tool call:
+  1. **ROOT CAUSE ANALYSIS**:
+     - Is it a tool name error? (e.g., using 'python' instead of 'python_exec')
+     - Is it a parameter error? (e.g., 'filename' instead of 'code')
+     - Is it a logic error in the code itself?
+     - Is it a missing import or undefined function?
+  
+  2. **FIX STRATEGY**:
+     - If tool name wrong → check the AVAILABLE TOOLS list above
+     - If param wrong → check the tool's parameter schema
+     - If logic error → review the algorithm step by step
+     - If import error → remember: use ONLY standard library!
+  
+  3. **COMMON MISTAKES TO AVOID**:
+     - ❌ Do NOT import from project files (like `from utils import X`)
+     - ❌ Do NOT use 'python' tool (use 'python_exec')
+     - ❌ Do NOT use 'filename' param (use 'code' for python_exec)
+     - ❌ Do NOT leave trailing commas in JSON
+     - ❌ Do NOT use comments inside JSON
+  
+  4. **VERIFICATION CHECKLIST**:
+     - [ ] Tool name matches schema EXACTLY?
+     - [ ] All required params present?
+     - [ ] Param names match schema EXACTLY?
+     - [ ] JSON is valid (no trailing commas, no comments)?
+     - [ ] Code is self-contained (no project imports)?
+     - [ ] All functions defined before use?
+  
+  ---
+  
+  ## 📝 YOUR CORRECTED RESPONSE:
+  
+  <think>
+  [Analyze the error, identify root cause, plan your fix]
+  </think>
+  
   ```json
-  {{"tool": "...", "params": {{...}}}}
+  {"tool": "exact_tool_name", "params": {...}}
   ```
 
 task_generation_prompt: |

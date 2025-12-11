@@ -280,6 +280,71 @@ KEYWORDS:"""
         
         return result
     
+    def record_outcome(self, memory_ids: List[int], success: bool, score_delta: float = 0):
+        """
+        Record the outcome when memories were used for advice.
+        
+        This creates a feedback loop:
+        - If advice led to improvement (success=True), boost importance
+        - If advice didn't help (success=False), decrease importance slightly
+        - Track success_count and fail_count for each memory
+        
+        Args:
+            memory_ids: IDs of memories that were used in this task
+            success: Whether the task succeeded (score improved or verified)
+            score_delta: How much the score improved (e.g., +5.0)
+        """
+        if not memory_ids:
+            return
+        
+        modified = False
+        for mem_id in memory_ids:
+            mem = self.get_by_id(mem_id)
+            if not mem:
+                continue
+            
+            modified = True
+            
+            if success:
+                # Boost importance for helpful advice
+                mem["success_count"] = mem.get("success_count", 0) + 1
+                
+                # Calculate boost based on score improvement
+                boost = min(1.0, max(0.2, score_delta / 10.0))  # 0.2 to 1.0
+                current_importance = mem.get("importance", 5)
+                new_importance = min(10, current_importance + boost)  # Cap at 10
+                mem["importance"] = new_importance
+                
+                # Add tag if significant help
+                if score_delta >= 5:
+                    tags = mem.get("tags", [])
+                    if "high_impact" not in tags:
+                        tags.append("high_impact")
+                        mem["tags"] = tags
+                
+                print(f"  📈 Memory #{mem_id} boosted: imp {current_importance:.1f} → {new_importance:.1f}")
+            else:
+                # Slight decrease for unhelpful advice
+                mem["fail_count"] = mem.get("fail_count", 0) + 1
+                current_importance = mem.get("importance", 5)
+                new_importance = max(1, current_importance - 0.3)  # Min 1
+                mem["importance"] = new_importance
+            
+            # Update success rate
+            total = mem.get("success_count", 0) + mem.get("fail_count", 0)
+            if total > 0:
+                mem["success_rate"] = mem.get("success_count", 0) / total
+        
+        if modified:
+            self._save()
+    
+    def get_by_id(self, mem_id: int) -> Optional[Dict]:
+        """Get a memory by its ID"""
+        for mem in self.memories:
+            if mem.get("id") == mem_id:
+                return mem
+        return None
+    
     def _get_candidates(self, query: str) -> List[Dict]:
         """Get candidate memories for ranking"""
         candidates = []
