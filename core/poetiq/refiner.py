@@ -272,15 +272,26 @@ class SelfRefiner:
     
     def _refine_response(self, response: str, task: str, feedback: str, 
                           tools_used: List[str], extra_context: str = "") -> str:
-        """ITERATE phase: single worker fallback"""
+        """ITERATE phase: single worker with memory context"""
         tools_str = ", ".join(tools_used) if tools_used else "None"
         tools_schema = self.registry.get_tools_prompt()
+        
+        # Get memory context from curator
+        memory_context = ""
+        try:
+            curator = get_curator()
+            error_summary = curator.get_error_summary_for_prompt()
+            if error_summary:
+                memory_context = f"Previous errors to avoid:\n{error_summary}"
+        except:
+            pass
         
         refine_prompt = REFINE_PROMPT.format(
             user_input=task,
             tools_used=tools_str,
             tools_schema=tools_schema,
-            feedback=feedback[:LIMIT_FEEDBACK_PREVIEW]
+            feedback=feedback[:LIMIT_FEEDBACK_PREVIEW],
+            memory_context=memory_context
         )
         
         if extra_context:
@@ -295,11 +306,22 @@ class SelfRefiner:
         tools_str = ", ".join(tools_used) if tools_used else "None"
         tools_schema = self.registry.get_tools_prompt()
         
+        # Get memory context from curator
+        memory_context = ""
+        try:
+            curator = get_curator()
+            error_summary = curator.get_error_summary_for_prompt()
+            if error_summary:
+                memory_context = f"Previous errors to avoid:\n{error_summary}"
+        except:
+            pass
+        
         refine_prompt = REFINE_PROMPT.format(
             user_input=task,
             tools_used=tools_str,
             tools_schema=tools_schema,
-            feedback=feedback[:LIMIT_FEEDBACK_PREVIEW]
+            feedback=feedback[:LIMIT_FEEDBACK_PREVIEW],
+            memory_context=memory_context
         )
         
         if extra_context:

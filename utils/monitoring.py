@@ -220,10 +220,11 @@ class MonitoringLogger:
         if len(self.errors) == 0:
             return "🟢 HEALTHY"
         
-        # Check recent error rate
+        # Check recent error rate (last 5 minutes)
+        from datetime import timedelta
+        cutoff_time = datetime.now() - timedelta(minutes=5)
         recent_errors = [e for e in self.errors[-10:] 
-                        if datetime.fromisoformat(e['time']) > 
-                           datetime.now().replace(second=datetime.now().second - 300)]
+                        if datetime.fromisoformat(e['time']) > cutoff_time]
         
         if len(recent_errors) >= 5:
             return "🔴 CRITICAL"
