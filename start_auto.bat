@@ -1,3 +1,0 @@
-@echo off
-echo Starting Autonomous Poetiq Worker...
-python autonomous_loop.py > autonomous.log 2>&1
