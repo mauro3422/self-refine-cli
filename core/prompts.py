@@ -34,27 +34,38 @@ Step 2: Output ONE tool call:
 """
 
 
-# Structured evaluation - forces clear score output
-EVAL_PROMPT = """Evaluate this response on a scale of 0-25.
+# Enhanced evaluation with dimensional feedback and memory context
+EVAL_PROMPT = """Evaluate this response across 5 dimensions (0-5 each, total 25).
 
 TASK: {user_input}
 RESPONSE: {response}
 TOOLS USED: {tools_used}
+{memory_context}
+DIMENSIONS (score 0-5 each):
+1. CORRECTNESS: Does it produce the expected output?
+2. TOOL_USAGE: Right tool with correct parameters?
+3. EFFICIENCY: Is the solution optimal?
+4. ERROR_HANDLING: Handles edge cases?
+5. STYLE: Clean, readable code?
 
-SCORING CRITERIA (be generous if the code works):
-- 23-25: Perfect - tool used correctly, output clear, no issues
-- 20-22: Excellent - minor style issues but functionally correct
-- 17-19: Good - works but could be improved
-- 14-16: Acceptable - partial solution
-- 10-13: Weak - significant issues
-- 0-9: Failed
+SCORING GUIDE:
+- 5/5: Perfect in this dimension
+- 4/5: Minor issues
+- 3/5: Acceptable
+- 2/5: Significant issues
+- 1/5: Major problems
+- 0/5: Failed completely
 
-IMPORTANT: If the code would execute and produce correct output, score AT LEAST 20.
+IMPORTANT: If code works correctly, CORRECTNESS should be at least 4.
 
-You MUST output exactly this format at the end:
-TOTAL_SCORE: [number]/25
-
-Example: TOTAL_SCORE: 22/25"""
+OUTPUT FORMAT (follow exactly):
+CORRECTNESS: [0-5] - [brief reason]
+TOOL_USAGE: [0-5] - [brief reason]
+EFFICIENCY: [0-5] - [brief reason]
+ERROR_HANDLING: [0-5] - [brief reason]
+STYLE: [0-5] - [brief reason]
+TOTAL_SCORE: [sum]/25
+IMPROVEMENT_TIP: [one specific suggestion]"""
 
 # Minimal refine prompt
 REFINE_PROMPT = """Fix this:

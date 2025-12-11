@@ -135,13 +135,32 @@ class PoetiqRunner:
         else:
             # Need to evaluate since not all verified
             from core.prompts import EVAL_PROMPT
+            from config.settings import MEMORY_SLOT
+            from memory.curator import get_curator
+            
+            # Get memory context
+            memory_context = ""
+            try:
+                curator = get_curator()
+                error_summary = curator.get_error_summary_for_prompt()
+                if error_summary:
+                    memory_context = f"\nKNOWN ERROR PATTERNS:\n{error_summary}\n"
+            except:
+                pass
+            
             tools_str = tool_name if tool_name else "None"
             pre_eval_prompt = EVAL_PROMPT.format(
                 user_input=task[:LIMIT_TASK_PREVIEW],
                 tools_used=tools_str,
-                response=winner.raw_response[:LIMIT_RESPONSE_PREVIEW]
+                response=winner.raw_response[:LIMIT_RESPONSE_PREVIEW],
+                memory_context=memory_context
             )
-            pre_feedback = self.llm.chat([{"role": "user", "content": pre_eval_prompt}], temp=0.2)
+            # Use MEMORY_SLOT for evaluator  
+            pre_feedback = self.llm.chat(
+                [{"role": "user", "content": pre_eval_prompt}], 
+                temp=0.2,
+                slot_id=MEMORY_SLOT
+            )
             pre_score = self.refiner._extract_score(pre_feedback)
             print(f"  📈 Pre-refine score: {pre_score}/25")
         

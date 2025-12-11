@@ -387,15 +387,24 @@ def main():
                     skipped_refine=result.get('skipped_refine', False)
                 )
                 
-                # Show global trend and metrics
+                # Show global trend and metrics with ASCII visualization
                 try:
                     stats = monitor.get_summary()
-                    trend = monitor.get_trend()
+                    trend_data = monitor.get_trend_summary()
+                    
+                    # Build ASCII score boxes: |21.5|→|22.0|→|23.5|
+                    sessions = trend_data.get('sessions', [])
+                    if sessions:
+                        scores = [s.get('avg_score', 0) for s in sessions[-5:]]
+                        score_boxes = "→".join(f"|{s:.1f}|" for s in scores)
+                    else:
+                        score_boxes = "No history yet"
+                    
                     log(f" ")
                     log(f"📊 GLOBAL ANALYTICS:")
-                    log(f"   • Sessions: {len(monitor._load_history().get('sessions', []))}")
-                    log(f"   • Tasks Today: {stats['tasks_completed']}")
-                    log(f"   • {trend}")
+                    log(f"   • Recent: {score_boxes}")
+                    log(f"   • Trend:  {trend_data.get('sparkline', '─')} {trend_data.get('direction_icon', '→')} {trend_data.get('delta', 0):+.1f}")
+                    log(f"   • Stats:  {stats['tasks_completed']} tasks | {trend_data.get('avg_all_time', 0):.1f} avg | Best: {trend_data.get('best_score', 0)}")
                     log(f"   • Health: {stats['health']}")
                     log(f" ")
                 except Exception as e:

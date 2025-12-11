@@ -16,10 +16,12 @@ from config.settings import (
     WORKER_TEMPS, 
     LIMIT_RESPONSE_PREVIEW, 
     LIMIT_FEEDBACK_PREVIEW,
-    LIMIT_CODE_PREVIEW
+    LIMIT_CODE_PREVIEW,
+    MEMORY_SLOT  # Use dedicated slot for evaluator
 )
 from .worker import WorkerResponse
 from memory.reflection_buffer import get_buffer as get_reflection_buffer
+from memory.curator import get_curator  # Get error patterns for context
 
 
 class SelfRefiner:
@@ -174,36 +176,70 @@ class SelfRefiner:
         return None
     
     def _evaluate(self, response: str, task: str, tools_used: List[str]) -> tuple:
-        """FEEDBACK phase: single worker fallback"""
+        """FEEDBACK phase: single worker with memory context.
+        Uses MEMORY_SLOT for KV cache efficiency.
+        """
         tools_str = ", ".join(tools_used) if tools_used else "None"
+        
+        # Get memory context from curator (error patterns)
+        memory_context = ""
+        try:
+            curator = get_curator()
+            error_summary = curator.get_error_summary_for_prompt()
+            if error_summary:
+                memory_context = f"\nKNOWN ERROR PATTERNS:\n{error_summary}\n"
+        except:
+            pass  # Memory context is optional
         
         eval_prompt = EVAL_PROMPT.format(
             user_input=task,
             tools_used=tools_str,
-            response=response[:LIMIT_RESPONSE_PREVIEW]
+            response=response[:LIMIT_RESPONSE_PREVIEW],
+            memory_context=memory_context
         )
         
-        feedback = self.llm.chat([{"role": "user", "content": eval_prompt}], temp=0.3)
+        # Use MEMORY_SLOT for evaluator (shares context with memory system)
+        feedback = self.llm.chat(
+            [{"role": "user", "content": eval_prompt}], 
+            temp=0.3, 
+            slot_id=MEMORY_SLOT
+        )
         score = self._extract_score(feedback)
         
         return score, feedback
     
     def _parallel_evaluate(self, response: str, task: str, tools_used: List[str], 
                            num_workers: int = 3) -> tuple:
-        """PARALLEL FEEDBACK: Use multiple evaluators for robust scoring."""
+        """PARALLEL FEEDBACK: Use multiple evaluators with memory context."""
         tools_str = ", ".join(tools_used) if tools_used else "None"
+        
+        # Get memory context from curator (error patterns)
+        memory_context = ""
+        try:
+            curator = get_curator()
+            error_summary = curator.get_error_summary_for_prompt()
+            if error_summary:
+                memory_context = f"\nKNOWN ERROR PATTERNS:\n{error_summary}\n"
+        except:
+            pass
         
         eval_prompt = EVAL_PROMPT.format(
             user_input=task,
             tools_used=tools_str,
-            response=response[:LIMIT_RESPONSE_PREVIEW]
+            response=response[:LIMIT_RESPONSE_PREVIEW],
+            memory_context=memory_context
         )
         
         temps = [0.2, 0.3, 0.4][:num_workers]
         
         def eval_worker(worker_id: int, temp: float) -> tuple:
             llm = LLMClient()
-            feedback = llm.chat([{"role": "user", "content": eval_prompt}], temp=temp)
+            # Use MEMORY_SLOT for evaluators
+            feedback = llm.chat(
+                [{"role": "user", "content": eval_prompt}], 
+                temp=temp, 
+                slot_id=MEMORY_SLOT
+            )
             score = self._extract_score(feedback)
             return worker_id, score, feedback
         
