@@ -7,8 +7,45 @@ from typing import Dict, Any, List
 from tools.base import Tool
 
 
+# Standard library modules that are safe to import
+STDLIB_MODULES = {
+    # Built-ins and core
+    'abc', 'aifc', 'argparse', 'array', 'ast', 'asynchat', 'asyncio', 'asyncore',
+    'atexit', 'base64', 'bdb', 'binascii', 'binhex', 'bisect', 'builtins',
+    'bz2', 'calendar', 'cgi', 'cgitb', 'chunk', 'cmath', 'cmd', 'code',
+    'codecs', 'codeop', 'collections', 'colorsys', 'compileall', 'concurrent',
+    'configparser', 'contextlib', 'contextvars', 'copy', 'copyreg', 'cProfile',
+    'crypt', 'csv', 'ctypes', 'curses', 'dataclasses', 'datetime', 'dbm',
+    'decimal', 'difflib', 'dis', 'distutils', 'doctest', 'email', 'encodings',
+    'enum', 'errno', 'faulthandler', 'fcntl', 'filecmp', 'fileinput', 'fnmatch',
+    'fractions', 'ftplib', 'functools', 'gc', 'getopt', 'getpass', 'gettext',
+    'glob', 'graphlib', 'grp', 'gzip', 'hashlib', 'heapq', 'hmac', 'html',
+    'http', 'idlelib', 'imaplib', 'imghdr', 'imp', 'importlib', 'inspect',
+    'io', 'ipaddress', 'itertools', 'json', 'keyword', 'lib2to3', 'linecache',
+    'locale', 'logging', 'lzma', 'mailbox', 'mailcap', 'marshal', 'math',
+    'mimetypes', 'mmap', 'modulefinder', 'multiprocessing', 'netrc', 'nis',
+    'nntplib', 'numbers', 'operator', 'optparse', 'os', 'ossaudiodev',
+    'pathlib', 'pdb', 'pickle', 'pickletools', 'pipes', 'pkgutil', 'platform',
+    'plistlib', 'poplib', 'posix', 'posixpath', 'pprint', 'profile', 'pstats',
+    'pty', 'pwd', 'py_compile', 'pyclbr', 'pydoc', 'queue', 'quopri', 'random',
+    're', 'readline', 'reprlib', 'resource', 'rlcompleter', 'runpy', 'sched',
+    'secrets', 'select', 'selectors', 'shelve', 'shlex', 'shutil', 'signal',
+    'site', 'smtpd', 'smtplib', 'sndhdr', 'socket', 'socketserver', 'spwd',
+    'sqlite3', 'ssl', 'stat', 'statistics', 'string', 'stringprep', 'struct',
+    'subprocess', 'sunau', 'symtable', 'sys', 'sysconfig', 'syslog', 'tabnanny',
+    'tarfile', 'telnetlib', 'tempfile', 'termios', 'test', 'textwrap', 'threading',
+    'time', 'timeit', 'tkinter', 'token', 'tokenize', 'trace', 'traceback',
+    'tracemalloc', 'tty', 'turtle', 'turtledemo', 'types', 'typing', 'unicodedata',
+    'unittest', 'urllib', 'uu', 'uuid', 'venv', 'warnings', 'wave', 'weakref',
+    'webbrowser', 'winreg', 'winsound', 'wsgiref', 'xdrlib', 'xml', 'xmlrpc',
+    'zipapp', 'zipfile', 'zipimport', 'zlib',
+    # Common typing imports
+    'typing_extensions',
+}
+
+
 class LinterTool(Tool):
-    """Tool to check Python code syntax and basic style using AST"""
+    """Tool to check Python code syntax, imports, and basic style using AST"""
     
     @property
     def name(self) -> str:
@@ -16,7 +53,7 @@ class LinterTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Analyzes Python code for syntax errors and basic structural issues. Use it before running new code."
+        return "Analyzes Python code for syntax errors, invalid imports, and structural issues. Use before running code."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
@@ -42,15 +79,39 @@ class LinterTool(Tool):
                     "valid_syntax": False
                 }
             
-            # Basic Static Analysis
+            # Parse AST for analysis
             tree = ast.parse(code)
             issues = []
+            invalid_imports = []
             
-            # Check for empty except blocks (bad practice)
             for node in ast.walk(tree):
+                # Check for empty except blocks (bad practice)
                 if isinstance(node, ast.ExceptHandler):
                     if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
                         issues.append(f"Line {node.lineno}: Empty except block (silent failure)")
+                
+                # Check for invalid imports
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        module_name = alias.name.split('.')[0]
+                        if module_name not in STDLIB_MODULES:
+                            invalid_imports.append(f"Line {node.lineno}: Cannot import '{alias.name}' - not in standard library")
+                
+                if isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        module_name = node.module.split('.')[0]
+                        if module_name not in STDLIB_MODULES:
+                            invalid_imports.append(f"Line {node.lineno}: Cannot import from '{node.module}' - not in standard library")
+            
+            # Return error if invalid imports found
+            if invalid_imports:
+                return {
+                    "success": False,
+                    "error": "Invalid imports detected. You must define all functions locally.\n" + "\n".join(invalid_imports),
+                    "valid_syntax": True,
+                    "invalid_imports": invalid_imports,
+                    "hint": "Define the required functions directly in your code instead of importing."
+                }
             
             return {
                 "success": True,
@@ -61,6 +122,7 @@ class LinterTool(Tool):
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+
 
 class TestRunnerTool(Tool):
     """Tool to run specific unit tests"""
