@@ -19,8 +19,8 @@ MAX_TOKENS = 4096
 # ===================
 # Poetiq Parallel Workers
 # ===================
-NUM_WORKERS = 3
-WORKER_TEMPS = [0.2, 0.3, 0.4]  # Lower temps = less hallucination
+NUM_WORKERS = 2                 # Reduced to 2 for 8GB VRAM stability
+WORKER_TEMPS = [0.2, 0.4]       # Temps for the 2 workers
 
 # ===================
 # Self-Refine Loop
@@ -40,17 +40,24 @@ AUTO_SUCCESS_SCORE = 10         # Score >= this = partial success
 # ===================
 # Memory System
 # ===================
-LLM_PARALLEL_SLOTS = 4          # Total parallel slots in llama.cpp server
+# Optimized for 8GB VRAM: ~1.5GB model + 5 slots * 100MB = ~2.0GB total
+LLM_PARALLEL_SLOTS = 5          # Total parallel slots in llama.cpp server
 
-# Slot assignments (for KV cache efficiency):
-# - Slot 0, 1, 2: Poetiq workers (parallel generation)
-# - Slot 3: Memory system ONLY (LLMLinker, Evolution, base memory)
-# - Slot -1: Auto-assign (for things that don't need cache affinity)
+# Slot assignments (dedicated slots prevent collisions that cause GGML_ASSERT crash):
+# ┌────────┬─────────────────────────────────────────────────────────────────┐
+# │ Slot   │ Assignment                                                      │
+# ├────────┼─────────────────────────────────────────────────────────────────┤
+# │ 0      │ Worker 0 (parallel generation)                                  │
+# │ 1      │ Worker 1 (parallel generation)                                  │
+# │ 2      │ Memory ONLY (LLMLinker, Evolution, MemoryLearner, base.py)      │
+# │ 3      │ Evaluator ONLY (pre-eval, _evaluate, _parallel_evaluate)        │
+# │ 4      │ Task Generator ONLY (autonomous loop task generation)           │
+# └────────┴─────────────────────────────────────────────────────────────────┘
 #
-# IMPORTANT: Avoid overloading slots! Each slot should have minimal concurrent users.
-MEMORY_SLOT = 3                 # ONLY for: LLMLinker, Evolution, MemoryLearner, base.py
-EVALUATOR_SLOT = -1             # Auto-assign: Evaluator doesn't need cache affinity
-TASK_GENERATOR_SLOT = -1        # Auto-assign: Each task is independent
+# IMPORTANT: Each component has its own slot - NO SHARING = NO CRASHES
+MEMORY_SLOT = 2                 # Dedicated: Memory system only
+EVALUATOR_SLOT = 3              # Dedicated: Evaluator only  
+TASK_GENERATOR_SLOT = 4         # Dedicated: Task generator only
 
 MEMORY_CACHE_SIZE = 100         # Max cached LLM evaluations
 MEMORY_MIN_IMPORTANCE = 5       # Min importance to retrieve

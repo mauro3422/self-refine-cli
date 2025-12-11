@@ -115,10 +115,10 @@ class LLMClient:
         }
         
         # CRITICAL STABILITY FIX:
-        # Slots >= 3 (Memory, Evaluator, TaskGen) process highly variable prompts.
+        # Slots >= 2 (Memory, Evaluator, TaskGen) process highly variable prompts.
         # Reusing context often fails to truncate correctly in llama.cpp, causing GGML_ASSERT crash.
         # STARTING with cache_prompt=False forces a clean slot reset every time.
-        if slot_id >= 3:
+        if slot_id >= 2:
             payload["cache_prompt"] = False
             time.sleep(0.2)  # Small safety delay for slot release
         

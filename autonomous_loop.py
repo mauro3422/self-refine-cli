@@ -20,7 +20,8 @@ from config.settings import (
     AUTO_SLEEP_INTERVAL, 
     AUTO_HEALTH_CHECK_EVERY, 
     AUTO_MAX_CONSECUTIVE_FAIL,
-    AUTO_SUCCESS_SCORE
+    AUTO_SUCCESS_SCORE,
+    NUM_WORKERS
 )
 from utils.logger import get_logger
 from utils.monitoring import get_monitoring_logger
@@ -297,7 +298,7 @@ def main():
     consecutive_failures = 0
     
     try:
-        runner = PoetiqRunner(num_workers=3)
+        runner = PoetiqRunner(num_workers=NUM_WORKERS)
         llm_client = LLMClient()  # For health checks
         monitor = get_monitoring_logger()  # Night supervision
         log("✅ System Initialized. Entering loop.")
@@ -356,7 +357,7 @@ def main():
                         if success:
                             consecutive_failures = 0
                             log("✅ Server restarted successfully!")
-                            runner = PoetiqRunner(num_workers=3)
+                            runner = PoetiqRunner(num_workers=NUM_WORKERS)
                             llm_client = LLMClient()
                         else:
                             log("❌ Restart failed. Waiting 60s before retry...")
