@@ -1,0 +1,122 @@
+# Memory System Prompts - Learning and retrieval
+# Edit this file to modify memory behavior without code changes
+
+ranking_prompt: |
+  Given this task, rank which lessons are most relevant.
+  
+  TASK: {query}
+  {context}
+  
+  LESSONS:
+  {candidates}
+  
+  Rank the TOP 3 most relevant lessons for this task.
+  Consider: same tools needed, similar error patterns, related concepts.
+  
+  Return ONLY the numbers, e.g: 2,5,1
+  RANKING:
+
+linking_prompt: |
+  Analyze connections between this new memory and existing ones.
+  
+  NEW MEMORY:
+  {new_memory}
+  
+  EXISTING MEMORIES:
+  {existing}
+  
+  Find connections based on:
+  - Same tool usage
+  - Similar error types
+  - Related concepts
+  - Cause-effect relationships
+  
+  Return connections as: index:strength (0.0-1.0)
+  Example: 1:0.8, 3:0.5, 7:0.3
+  
+  CONNECTIONS:
+
+analysis_prompt: |
+  Analyze this task execution and extract lessons learned.
+  
+  TASK: {task}
+  INITIAL SCORE: {initial_score}/25
+  FINAL SCORE: {final_score}/25
+  ITERATIONS: {iterations}
+  TOOLS USED: {tools}
+  ERRORS: {errors}
+  
+  WORKER PERFORMANCE:
+  {workers_data}
+  
+  Extract 1-3 ACTIONABLE lessons. Be specific about:
+  - What worked well?
+  - What could be improved?
+  - What patterns to remember?
+  
+  FORMAT (one lesson per line):
+  LESSON: [specific actionable insight]
+  LESSON: [another insight]
+
+pattern_prompt: |
+  Extract an ABSTRACT success pattern from this verified code.
+  
+  TASK TYPE: {task_type}
+  CODE THAT PASSED:
+  ```python
+  {code}
+  ```
+  TEST CASES PASSED: {test_cases}
+  
+  Extract a reusable pattern (not the specific code).
+  Focus on: approach, data structures, algorithm choices.
+  
+  PATTERN: [one line describing the pattern]
+  WHEN TO USE: [when this pattern applies]
+
+merge_check_prompt: |
+  Are these two lessons about the SAME topic and should be merged?
+  
+  LESSON A: {lesson_a}
+  LESSON B: {lesson_b}
+  
+  They should be merged if:
+  - Both about the same tool/error
+  - One is more specific than the other
+  - Combining them adds value
+  
+  Answer YES or NO only.
+
+merge_prompt: |
+  Merge these two related lessons into ONE concise rule.
+  
+  LESSON A: {lesson_a}
+  LESSON B: {lesson_b}
+  
+  Create a single, actionable lesson that captures both.
+  Keep it under 100 words.
+  
+  MERGED LESSON:
+
+contradict_prompt: |
+  Do these lessons CONTRADICT each other?
+  
+  LESSON A: {lesson_a}
+  LESSON B: {lesson_b}
+  
+  They contradict if they give OPPOSITE advice for the same situation.
+  Minor differences or additions are NOT contradictions.
+  
+  Answer YES or NO only.
+
+keywords_prompt: |
+  Extract 3-10 semantic keywords from this lesson.
+  
+  LESSON: {lesson}
+  
+  Keywords should be:
+  - Relevant for search/retrieval
+  - Mix of technical terms and concepts
+  - No duplicates
+  
+  Output ONLY comma-separated keywords, nothing else.

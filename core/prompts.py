@@ -1,98 +1,34 @@
-# Prompts Module - Optimized for Liquid LMF2
-# Uses <think></think> tokens for Chain-of-Thought reasoning
-# Follows LMF2 best practices: precise, concise, structured output
+# Prompts Module - Now uses YAML hot-reload system
+# Edit prompts/*.yaml files to modify prompts without code changes
+#
+# This file provides backward compatibility - imports from YAML files
+# For direct YAML access use: from prompts import get_prompt
 
-AGENT_SYSTEM_PROMPT = """You are Poetiq, an AI coding assistant on WINDOWS.
+from prompts import get_prompt
 
-WORKSPACE: {workspace}/
+# === BACKWARD COMPATIBILITY LAYER ===
+# These variables load from YAML on first access
+# They support hot-reload when YAML files are modified
 
-## AVAILABLE TOOLS (use ONLY these):
-{tools_schema}
+def _get_agent_system_prompt():
+    return get_prompt("agent", "system_prompt")
 
-## HOW TO RESPOND:
+def _get_eval_prompt():
+    return get_prompt("evaluation", "eval_prompt")
 
-Step 1: Think inside <think></think> tags (required):
-<think>
-- What is the task asking?
-- Which tool from the list above matches?
-- What parameters does that tool need?
-</think>
+def _get_refine_prompt():
+    return get_prompt("agent", "refine_prompt")
 
-Step 2: Output ONE tool call:
-```json
-{{"tool": "EXACT_TOOL_NAME", "params": {{"param": "value"}}}}
-```
-
-## RULES:
-- Use ONLY tools from the list above. Do NOT invent tools.
-- If you need to see a file first, use `read_file` or `list_dir`.
-- ONE tool per response.
-- CODE MUST BE SELF-CONTAINED: Do NOT import from project files (like `from utils.X import Y`). Use only standard library imports (re, json, os, etc.) or define functions inline.
-- If task mentions "create file X", implement the logic directly in your code, don't try to import X.
-
-{memory_context}
-"""
+def _get_verification_prompt():
+    return get_prompt("evaluation", "verify_prompt")
 
 
-# Enhanced evaluation with dimensional feedback and memory context
-EVAL_PROMPT = """Evaluate this response across 5 dimensions (0-5 each, total 25).
-
-TASK: {user_input}
-RESPONSE: {response}
-TOOLS USED: {tools_used}
-{memory_context}
-DIMENSIONS (score 0-5 each):
-1. CORRECTNESS: Does it produce the expected output?
-2. TOOL_USAGE: Right tool with correct parameters?
-3. EFFICIENCY: Is the solution optimal?
-4. ERROR_HANDLING: Handles edge cases?
-5. STYLE: Clean, readable code?
-
-SCORING GUIDE:
-- 5/5: Perfect in this dimension
-- 4/5: Minor issues
-- 3/5: Acceptable
-- 2/5: Significant issues
-- 1/5: Major problems
-- 0/5: Failed completely
-
-IMPORTANT: If code works correctly, CORRECTNESS should be at least 4.
-
-OUTPUT FORMAT (follow exactly):
-CORRECTNESS: [0-5] - [brief reason]
-TOOL_USAGE: [0-5] - [brief reason]
-EFFICIENCY: [0-5] - [brief reason]
-ERROR_HANDLING: [0-5] - [brief reason]
-STYLE: [0-5] - [brief reason]
-TOTAL_SCORE: [sum]/25
-IMPROVEMENT_TIP: [one specific suggestion]"""
-
-# Minimal refine prompt
-REFINE_PROMPT = """Fix this:
-
-TASK: {user_input}
-TOOLS TRIED: {tools_used}
-PROBLEM: {feedback}
-
-AVAILABLE TOOLS (use ONLY these exact names):
-{tools_schema}
-
-INSTRUCTIONS:
-1. Use EXACTLY the tool names from the schema above (e.g., 'python_exec' NOT 'python').
-2. Use EXACTLY the parameter names from the schema (e.g., 'code' NOT 'filename').
-3. Output valid JSON ONLY. NO COMMENTS inside JSON.
-
-Correct tool usage:
-```json
-{{"tool": "...", "params": {{...}}}}
-```"""
-
-VERIFICATION_PROMPT = """Does this code work?
-CODE: {code}
-EXPECTED: {expected}
-ACTUAL: {output}
-
-Answer YES or NO."""
+# For backward compatibility, expose as module-level strings
+# These are loaded once on import but the YAML loader handles hot-reload internally
+AGENT_SYSTEM_PROMPT = get_prompt("agent", "system_prompt")
+EVAL_PROMPT = get_prompt("evaluation", "eval_prompt")
+REFINE_PROMPT = get_prompt("agent", "refine_prompt")
+VERIFICATION_PROMPT = get_prompt("evaluation", "verify_prompt")
 
 
 def build_tools_section(

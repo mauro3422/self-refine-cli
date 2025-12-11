@@ -1,0 +1,65 @@
+# Evaluation Prompts - Scoring and verification
+# Edit this file to modify evaluation criteria without code changes
+
+eval_prompt: |
+  Evaluate this response across 5 dimensions (0-5 each, total 25).
+  
+  TASK: {user_input}
+  RESPONSE: {response}
+  TOOLS USED: {tools_used}
+  {memory_context}
+  
+  DIMENSIONS (score 0-5 each):
+  1. CORRECTNESS: Does it produce the expected output?
+  2. TOOL_USAGE: Right tool with correct parameters?
+  3. EFFICIENCY: Is the solution optimal?
+  4. ERROR_HANDLING: Handles edge cases?
+  5. STYLE: Clean, readable code?
+  
+  SCORING GUIDE:
+  - 5/5: Perfect in this dimension
+  - 4/5: Minor issues
+  - 3/5: Acceptable
+  - 2/5: Significant issues
+  - 1/5: Major problems
+  - 0/5: Failed completely
+  
+  IMPORTANT: If code works correctly, CORRECTNESS should be at least 4.
+  
+  OUTPUT FORMAT (follow exactly):
+  CORRECTNESS: [0-5] - [brief reason]
+  TOOL_USAGE: [0-5] - [brief reason]
+  EFFICIENCY: [0-5] - [brief reason]
+  ERROR_HANDLING: [0-5] - [brief reason]
+  STYLE: [0-5] - [brief reason]
+  TOTAL_SCORE: [sum]/25
+  IMPROVEMENT_TIP: [one specific suggestion]
+
+verify_prompt: |
+  Verify this code execution result.
+  
+  CODE EXECUTED:
+  ```python
+  {code}
+  ```
+  
+  EXPECTED OUTPUT: {expected}
+  ACTUAL OUTPUT: {output}
+  
+  VERIFICATION CHECKLIST:
+  1. Does actual output match expected? (exact match or semantic match)
+  2. Were there any runtime errors?
+  3. Is the output format correct?
+  
+  If output doesn't match exactly but is semantically equivalent (e.g. whitespace differences), that's OK.
+  
+  VERDICT: [PASS or FAIL]
+  REASON: [one line explanation]
+
+quick_verify_prompt: |
+  Does this code produce correct output?
+  CODE: {code}
+  EXPECTED: {expected}
+  ACTUAL: {output}
+  
+  Answer PASS or FAIL only.
