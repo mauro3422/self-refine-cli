@@ -41,7 +41,13 @@ AUTO_SUCCESS_SCORE = 10         # Score >= this = partial success
 # Memory System
 # ===================
 LLM_PARALLEL_SLOTS = 4          # Total parallel slots in llama.cpp server
-MEMORY_SLOT = 3                 # Dedicated slot for LLMLinker/Evolution (keeps context warm)
+
+# Slot assignments (for KV cache efficiency):
+# - Slot 0, 1, 2: Poetiq workers (parallel generation)
+# - Slot 3: Memory system (LLMLinker, Evolution, Learner, TaskGenerator)
+MEMORY_SLOT = 3                 # Dedicated slot for memory operations
+TASK_GENERATOR_SLOT = 3         # Task generator shares memory slot (contextually similar)
+
 MEMORY_CACHE_SIZE = 100         # Max cached LLM evaluations
 MEMORY_MIN_IMPORTANCE = 5       # Min importance to retrieve
 MAX_SESSIONS_SAVED = 100        # How many session logs to keep (increased from 10)

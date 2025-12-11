@@ -65,6 +65,46 @@ class MemoryCuratorAgent:
             if key not in self._learned_hints:
                 self._learned_hints[key] = lesson[:100]  # Truncate
     
+    def get_top_errors(self, n: int = 5) -> List[Dict]:
+        """
+        Get top N most frequent errors for task generation.
+        Used by task generator to create targeted practice tasks.
+        
+        Returns:
+            List of dicts: [{"tool": "python_exec", "error": "IndexError", "count": 5}, ...]
+        """
+        with self._lock:
+            all_errors = []
+            for tool_name, errors in self._error_patterns.items():
+                for error_type, count in errors.items():
+                    if count >= 2:  # Only if happened 2+ times
+                        all_errors.append({
+                            "tool": tool_name,
+                            "error": error_type,
+                            "count": count
+                        })
+            
+            # Sort by count descending
+            all_errors.sort(key=lambda x: x["count"], reverse=True)
+            return all_errors[:n]
+    
+    def get_error_summary_for_prompt(self) -> str:
+        """
+        Get formatted error summary for task generator prompt.
+        
+        Returns:
+            String formatted for prompt injection
+        """
+        top_errors = self.get_top_errors(5)
+        if not top_errors:
+            return ""
+        
+        lines = ["## FREQUENT ERRORS (practice these areas):"]
+        for err in top_errors:
+            lines.append(f"- {err['error']} in {err['tool']} ({err['count']} times)")
+        
+        return "\n".join(lines)
+    
     def tick(self):
         """
         Called after each iteration of autonomous loop.

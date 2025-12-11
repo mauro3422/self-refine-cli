@@ -172,27 +172,59 @@ def _safe_parse(value_str: str):
     return value_str
 
 def generate_task(runner):
-    """Generate a task with ADAPTIVE DIFFICULTY based on performance history."""
+    """
+    Generate a task with INTELLIGENT CURRICULUM based on memory.
+    
+    Uses:
+    - Error patterns from Curator (practice frequent errors)
+    - Weak categories from AdaptiveDifficulty
+    - Recent lessons from ReflectionBuffer
+    - Dedicated slot for cache efficiency
+    """
     from memory.adaptive_difficulty import get_difficulty_tracker
     from memory.test_patterns import get_test_patterns
+    from memory.curator import get_curator
+    from memory.reflection_buffer import get_reflection_buffer
+    from config.settings import TASK_GENERATOR_SLOT
     
     tracker = get_difficulty_tracker()
     pattern_learner = get_test_patterns()
+    curator = get_curator()
     
-    # Check if we should target a weakness category
+    # === MEMORY CONTEXT ===
+    
+    # 1. Get error patterns from Curator
+    error_context = curator.get_error_summary_for_prompt()
+    if error_context:
+        log(f"🧠 Using error patterns for task targeting")
+    
+    # 2. Get weak categories from AdaptiveDifficulty
     should_target, weakness_category = tracker.should_target_weakness()
+    
+    # 3. Get recent lessons (avoid repeating mistakes)
+    lesson_context = ""
+    try:
+        buffer = get_reflection_buffer()
+        lessons = buffer.get_lessons()[-3:]  # Last 3 lessons
+        if lessons:
+            lesson_context = "\n## RECENT LESSONS (avoid these mistakes):\n"
+            for lesson in lessons:
+                lesson_context += f"- {lesson.get('lesson', '')[:80]}\n"
+    except Exception:
+        pass
+    
+    # === BUILD PROMPT ===
     
     # Get difficulty modifier
     difficulty_modifier = tracker.get_difficulty_prompt_modifier()
     
-    # Build category selection - SIMPLIFIED: one task per category
+    # Build category selection
     target_category = None
     if should_target and weakness_category:
         category_instruction = f"FOCUS ON: {weakness_category.upper()} category"
         target_category = weakness_category
         log(f"🎯 Targeting weakness: {weakness_category}")
     else:
-        # SIMPLIFIED: Pick ONE specific task, not multiple
         category_instruction = (
             "PICK exactly ONE task from this list:\n"
             "- STRING: validate_email OR reverse_string OR count_vowels OR is_palindrome\n"
@@ -212,8 +244,16 @@ def generate_task(runner):
                 test_suggestions += f"- Input: {p['input_type']}, Output: {p['output_type']}\n"
             log(f"📚 Using {len(patterns)} learned test patterns")
     
+    # Combine memory context
+    memory_context = ""
+    if error_context:
+        memory_context += f"\n{error_context}\n"
+    if lesson_context:
+        memory_context += f"\n{lesson_context}\n"
+    
     prompt = (
         f"Generate ONE SPECIFIC coding task (NO CODE!).\n\n"
+        f"{memory_context}"
         f"RULES:\n"
         f"1. Pick ONE operation from ONE category only!\n"
         f"2. DO NOT include any Python code or solution!\n"
@@ -233,7 +273,8 @@ def generate_task(runner):
     
     try:
         client = LLMClient()
-        task = client.generate(prompt, temp=TEMPERATURE)
+        # Use dedicated slot for cache efficiency
+        task = client.generate(prompt, temp=TEMPERATURE, slot_id=TASK_GENERATOR_SLOT)
         return task.strip()
     except Exception as e:
         log(f"⚠️ Task Generation Failed: {e}. Fallback to random.")
