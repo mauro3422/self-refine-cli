@@ -1,4 +1,5 @@
 @echo off
+setlocal
 title Self-Refine CLI - Start Services
 color 0A
 
@@ -7,69 +8,70 @@ echo      SELF-REFINE CLI - START SERVERS
 echo ============================================
 echo.
 
-:: Navigate to project root
-cd /d %~dp0
+:: Navigate to project root (where this script is located)
+cd /d "%~dp0"
+echo Current directory: %CD%
+echo.
 
 :: ========== VALIDATIONS ==========
+echo Checking requirements...
 
 :: Check if llama-server exists
 if not exist "server\llama-server.exe" (
-    echo [ERROR] llama-server.exe not found in server\ directory!
-    echo Please download llama.cpp compiled binaries.
-    pause
-    exit /b 1
+    echo [ERROR] llama-server.exe not found!
+    echo Expected at: %CD%\server\llama-server.exe
+    goto :error
 )
+echo [OK] Found llama-server.exe
 
 :: Check if model exists
-if not exist "models\*.gguf" (
-    echo [ERROR] No .gguf model found in models\ directory!
-    echo Please download a model (e.g., Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf)
-    pause
-    exit /b 1
+dir /b "models\*.gguf" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] No .gguf model found!
+    echo Expected in: %CD%\models\
+    goto :error
 )
+echo [OK] Found model file
 
 :: ========== START SERVICES ==========
+echo.
+echo Starting services...
+echo.
 
 echo [1/2] Starting LLM Server (Vulkan GPU)...
-start "LLM Server" cmd /k "scripts\start_llm.bat"
-echo      Waiting 5s...
+start "LLM Server" cmd /k "cd /d %CD% && scripts\start_llm.bat"
+echo      Server window opened. Waiting 5s...
 timeout /t 5 /nobreak >nul
 
 echo [2/2] Starting ChromaDB Vector Server...
-start "ChromaDB" cmd /k "scripts\start_chroma.bat"
-echo      Waiting 3s...
+start "ChromaDB" cmd /k "cd /d %CD% && scripts\start_chroma.bat"
+echo      ChromaDB window opened. Waiting 3s...
 timeout /t 3 /nobreak >nul
 
-:: ========== HEALTH CHECK ==========
-
 echo.
-echo Checking LLM Server health...
-curl -s http://localhost:8000/health >nul 2>&1
-if %ERRORLEVEL%==0 (
-    echo [OK] LLM Server: http://localhost:8000
-) else (
-    echo [WARNING] LLM Server may still be starting...
-)
+echo [Optional] Starting Dashboard...
+start "Dashboard" cmd /k "cd /d %CD% && python -m ui.dashboard"
+echo      Dashboard opened at http://localhost:5000
+timeout /t 2 /nobreak >nul
 
+:: ========== DONE ==========
 echo.
 echo ============================================
-echo          SERVERS STARTED
+echo          ALL SERVICES STARTED
 echo ============================================
 echo.
-echo LLM Server:  http://localhost:8000
+echo LLM Server:  http://localhost:8000 (may take 30s to load model)
 echo ChromaDB:    http://localhost:8100
+echo Dashboard:   http://localhost:5000
+echo.
+echo Press any key to close this window...
+pause >nul
+exit /b 0
+
+:error
 echo.
 echo ============================================
-echo          NEXT STEPS
+echo          STARTUP FAILED
 echo ============================================
-echo.
-echo For DOCKER (sandboxed - recommended):
-echo   docker-compose up --build
-echo.
-echo For LOCAL (no sandbox):
-echo   python autonomous_loop.py
-echo.
-echo For DASHBOARD:
-echo   python -m ui.dashboard
-echo.
 pause
+exit /b 1

@@ -188,6 +188,10 @@ def get_buffer() -> ReflectionBuffer:
     return _buffer
 
 
+# Alias for consistency with other modules
+get_reflection_buffer = get_buffer
+
+
 # Quick test
 if __name__ == "__main__":
     buffer = ReflectionBuffer("test_reflections.json")
