@@ -17,7 +17,7 @@ from config.settings import (
     LIMIT_RESPONSE_PREVIEW, 
     LIMIT_FEEDBACK_PREVIEW,
     LIMIT_CODE_PREVIEW,
-    MEMORY_SLOT  # Use dedicated slot for evaluator
+    EVALUATOR_SLOT  # Auto-assign slot for evaluator (avoid overloading MEMORY_SLOT)
 )
 from .worker import WorkerResponse
 from memory.reflection_buffer import get_buffer as get_reflection_buffer
@@ -202,7 +202,7 @@ class SelfRefiner:
         feedback = self.llm.chat(
             [{"role": "user", "content": eval_prompt}], 
             temp=0.3, 
-            slot_id=MEMORY_SLOT
+            slot_id=EVALUATOR_SLOT
         )
         score = self._extract_score(feedback)
         
@@ -238,7 +238,7 @@ class SelfRefiner:
             feedback = llm.chat(
                 [{"role": "user", "content": eval_prompt}], 
                 temp=temp, 
-                slot_id=MEMORY_SLOT
+                slot_id=EVALUATOR_SLOT
             )
             score = self._extract_score(feedback)
             return worker_id, score, feedback

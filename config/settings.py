@@ -44,9 +44,13 @@ LLM_PARALLEL_SLOTS = 4          # Total parallel slots in llama.cpp server
 
 # Slot assignments (for KV cache efficiency):
 # - Slot 0, 1, 2: Poetiq workers (parallel generation)
-# - Slot 3: Memory system (LLMLinker, Evolution, Learner, TaskGenerator)
-MEMORY_SLOT = 3                 # Dedicated slot for memory operations
-TASK_GENERATOR_SLOT = 3         # Task generator shares memory slot (contextually similar)
+# - Slot 3: Memory system ONLY (LLMLinker, Evolution, base memory)
+# - Slot -1: Auto-assign (for things that don't need cache affinity)
+#
+# IMPORTANT: Avoid overloading slots! Each slot should have minimal concurrent users.
+MEMORY_SLOT = 3                 # ONLY for: LLMLinker, Evolution, MemoryLearner, base.py
+EVALUATOR_SLOT = -1             # Auto-assign: Evaluator doesn't need cache affinity
+TASK_GENERATOR_SLOT = -1        # Auto-assign: Each task is independent
 
 MEMORY_CACHE_SIZE = 100         # Max cached LLM evaluations
 MEMORY_MIN_IMPORTANCE = 5       # Min importance to retrieve

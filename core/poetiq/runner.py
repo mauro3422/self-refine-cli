@@ -13,7 +13,7 @@ from core.parsers import extract_tool_call
 from tools.registry import get_registry
 from utils.logger import new_session
 from memory.orchestrator import get_orchestrator
-from config.settings import LIMIT_TASK_PREVIEW, LIMIT_RESPONSE_PREVIEW
+from config.settings import LIMIT_TASK_PREVIEW, LIMIT_RESPONSE_PREVIEW, EVALUATOR_SLOT
 from memory.learner import MemoryLearner
 from config.settings import MAX_ITERATIONS, SCORE_THRESHOLD, WORKER_TEMPS
 
@@ -155,11 +155,11 @@ class PoetiqRunner:
                 response=winner.raw_response[:LIMIT_RESPONSE_PREVIEW],
                 memory_context=memory_context
             )
-            # Use MEMORY_SLOT for evaluator  
+            # Use EVALUATOR_SLOT (auto-assign) to avoid slot collision with memory system  
             pre_feedback = self.llm.chat(
                 [{"role": "user", "content": pre_eval_prompt}], 
                 temp=0.2,
-                slot_id=MEMORY_SLOT
+                slot_id=EVALUATOR_SLOT
             )
             pre_score = self.refiner._extract_score(pre_feedback)
             print(f"  📈 Pre-refine score: {pre_score}/25")
