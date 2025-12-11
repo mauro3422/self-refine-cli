@@ -337,24 +337,33 @@ def main():
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 log("⚠️ Too many consecutive failures. Saving checkpoint...")
                 save_checkpoint(task_count, "health_failure")
-                log("🔄 Triggering self-restart via health_check.py...")
                 
-                # Try to recover by importing and calling restart
-                try:
-                    from health_check import restart_server
-                    success = restart_server()
-                    if success:
-                        consecutive_failures = 0
-                        log("✅ Server restarted successfully!")
-                        # Recreate the runner with fresh connection
-                        runner = PoetiqRunner(num_workers=3)
-                        llm_client = LLMClient()
-                    else:
-                        log("❌ Restart failed. Waiting 60s before retry...")
-                        time.sleep(60)
-                except Exception as e:
-                    log(f"❌ Restart mechanism error: {e}. Waiting 60s...")
-                    time.sleep(60)
+                # Check if running in Docker
+                in_docker = os.environ.get("IN_DOCKER_CONTAINER", "") == "true"
+                
+                if in_docker:
+                    # In Docker, just reset and continue - container can be restarted externally
+                    log("🐳 Docker detected - resetting failure count and continuing...")
+                    consecutive_failures = 0
+                    runner = PoetiqRunner(num_workers=3)
+                    llm_client = LLMClient()
+                else:
+                    # Local: try to restart server
+                    log("🔄 Triggering self-restart via health_check.py...")
+                    try:
+                        from health_check import restart_server
+                        success = restart_server()
+                        if success:
+                            consecutive_failures = 0
+                            log("✅ Server restarted successfully!")
+                            runner = PoetiqRunner(num_workers=3)
+                            llm_client = LLMClient()
+                        else:
+                            log("❌ Restart failed. Waiting 60s before retry...")
+                            time.sleep(60)
+                    except Exception as e:
+                        log(f"❌ Restart mechanism error: {e}. Resetting and continuing...")
+                        consecutive_failures = 0  # Reset instead of blocking
                 continue
             
             # 1. Generate Task
