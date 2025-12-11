@@ -1,0 +1,25 @@
+{
+    "name": "analyze_code_structure",
+    "description": "Analyze the structure of a Python file (classes, functions, imports)",
+    "parameters": {
+        "path": {
+            "type": "string",
+            "description": "Python file path to analyze",
+            "required": true
+        }
+    },
+    "examples": [
+        {
+            "tool": "analyze_code_structure",
+            "params": {
+                "path": "sandbox/main.py"
+            }
+        }
+    ],
+    "error_hints": {
+        "FileNotFoundError": "File doesn't exist. Check the path.",
+        "SyntaxError": "File has syntax errors. Cannot parse structure."
+    },
+    "version": 1,
+    "last_updated": "2025-12-10"
+}

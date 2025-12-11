@@ -1,0 +1,25 @@
+{
+    "name": "linter",
+    "description": "Run Python linter on a file to check for errors",
+    "parameters": {
+        "path": {
+            "type": "string",
+            "description": "Python file path to lint",
+            "required": true
+        }
+    },
+    "examples": [
+        {
+            "tool": "linter",
+            "params": {
+                "path": "sandbox/script.py"
+            }
+        }
+    ],
+    "error_hints": {
+        "FileNotFoundError": "File doesn't exist. Check the path.",
+        "SyntaxError": "File has syntax errors. Fix them before linting."
+    },
+    "version": 1,
+    "last_updated": "2025-12-10"
+}

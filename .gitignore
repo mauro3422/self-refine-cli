@@ -10,21 +10,34 @@ venv/
 .venv
 env.bak/
 venv.bak/
+
+# Server
 server/
 server
+
+# Build artifacts & logs
+build_log.txt
+*.log
+
+# Models (too large for git)
+models/
+
 # Project specific
 .gemini/
-sandbox/
 logs/
 pip_cache/
-# Data - Persistent learning (optional to commit)
-data/
 
 # Sandbox - Test files
 sandbox/
 
-# Outputs - Ignore transient files but keep sessions
-outputs/debug_logs/
-outputs/benchmark_*.json
-outputs/vector_memory*/
-# outputs/*.json  # Temporarily disabled for analysis
+# Data - Persistent learning (don't share personal data)
+data/
+
+# Outputs - All transient files (still readable locally)
+outputs/
+
+# Checkpoints
+autonomous_checkpoint.json
+
+# Private notes
+docs/PRIVATE_ROADMAP.md

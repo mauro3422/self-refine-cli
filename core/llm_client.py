@@ -75,6 +75,8 @@ class LLMClient:
                     messages=messages,
                     temperature=temp,
                     max_tokens=MAX_TOKENS,
+                    frequency_penalty=0.5,  # Discourage repetition loops
+                    presence_penalty=0.5,   # Encourage new topics
                 )
                 self.consecutive_errors = 0  # Reset on success
                 return response.choices[0].message.content
@@ -106,6 +108,9 @@ class LLMClient:
             "n_predict": MAX_TOKENS,
             "id_slot": slot_id,  # KEY: Assign to specific slot!
             "cache_prompt": True,  # Reuse cached context
+            "repeat_penalty": 1.1,  # Standard repetition penalty
+            "frequency_penalty": 0.5,
+            "presence_penalty": 0.5,
             "stop": ["</s>", "[INST]", "[/INST]", "User:", "Human:"],
         }
         

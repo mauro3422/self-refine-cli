@@ -2,7 +2,28 @@
 import os
 from typing import Dict, Any
 from tools.base import Tool
+from config.settings import AGENT_WORKSPACE
 
+# Ensure sandbox exists
+if not os.path.exists(AGENT_WORKSPACE):
+    os.makedirs(AGENT_WORKSPACE)
+
+def _is_safe_path(path: str) -> bool:
+    """
+    SECURITY: Checks if path is within the sandbox directory.
+    Prevents path traversal attacks (e.g., ../../windows).
+    """
+    try:
+        # Get absolute path of sandbox
+        sandbox_abs = os.path.abspath(AGENT_WORKSPACE)
+        
+        # Get absolute path of requested file
+        requested_abs = os.path.abspath(path)
+        
+        # Check if requested path starts with sandbox path
+        return requested_abs.startswith(sandbox_abs)
+    except Exception:
+        return False
 
 class ReadFileTool(Tool):
     """Tool to read file contents"""
@@ -13,19 +34,23 @@ class ReadFileTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Reads the contents of a file. Useful for reading code, configs, docs, etc."
+        return "Reads the contents of a file. Restricted to 'sandbox/' directory."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Path to the file to read (absolute or relative)"
+                "description": "Path to the file to read (must be inside sandbox)"
             }
         }
     
     def execute(self, path: str) -> Dict[str, Any]:
         try:
+            # SECURITY CHECK
+            if not _is_safe_path(path):
+                return {"success": False, "error": f"SECURITY ERROR: Access denied to '{path}'. You can only access files inside '{AGENT_WORKSPACE}/'."}
+                
             if not os.path.exists(path):
                 # NEW: Smart suggestions when file not found
                 dir_path = os.path.dirname(path) or "."
@@ -72,7 +97,6 @@ class ReadFileTool(Tool):
             return {"success": False, "error": str(e)}
 
 
-
 class WriteFileTool(Tool):
     """Tool to write content to a file"""
     
@@ -82,14 +106,14 @@ class WriteFileTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Writes content to a file. PREFERRED for creating new files or overwriting. Creates the file if it doesn't exist."
+        return "Writes content to a file. PREFERRED for creating new files. Restricted to 'sandbox/' directory."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Path to the file to write"
+                "description": "Path to the file to write (must be inside sandbox)"
             },
             "content": {
                 "type": "string",
@@ -102,6 +126,10 @@ class WriteFileTool(Tool):
         max_retries = 3
         import time
         
+        # SECURITY CHECK
+        if not _is_safe_path(path):
+            return {"success": False, "error": f"SECURITY ERROR: Write denied to '{path}'. You can only write to files inside '{AGENT_WORKSPACE}/'."}
+        
         for attempt in range(max_retries):
             try:
                 # Create directory if needed
@@ -111,6 +139,8 @@ class WriteFileTool(Tool):
                 
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(content)
+                    f.flush()  # Flush buffer to OS
+                    os.fsync(f.fileno())  # Force write to disk
                 
                 return {
                     "success": True,
@@ -137,19 +167,23 @@ class ListDirectoryTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Lists the contents of a directory (files and folders)."
+        return "Lists the contents of a directory. Restricted to 'sandbox/'."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
         return {
             "path": {
                 "type": "string",
-                "description": "Path to the directory to list"
+                "description": "Path to the directory to list (must be inside sandbox)"
             }
         }
     
     def execute(self, path: str) -> Dict[str, Any]:
         try:
+            # SECURITY CHECK
+            if not _is_safe_path(path):
+                return {"success": False, "error": f"SECURITY ERROR: Access denied to '{path}'. You can only List files inside '{AGENT_WORKSPACE}/'."}
+            
             if not os.path.exists(path):
                 return {"success": False, "error": f"Directory not found: {path}"}
             

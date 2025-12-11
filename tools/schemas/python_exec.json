@@ -1,0 +1,38 @@
+{
+    "name": "python_exec",
+    "description": "Execute Python code in isolated sandbox environment",
+    "parameters": {
+        "code": {
+            "type": "string",
+            "description": "Python code to execute",
+            "required": true
+        }
+    },
+    "examples": [
+        {
+            "tool": "python_exec",
+            "params": {
+                "code": "print(2 + 2)"
+            }
+        },
+        {
+            "tool": "python_exec",
+            "params": {
+                "code": "def solve(x): return x * 2\nprint(solve(5))"
+            }
+        }
+    ],
+    "error_hints": {
+        "SyntaxError": "Check for missing colons, parentheses, or indentation errors.",
+        "NameError": "Variable or function not defined. Make sure to define it before using.",
+        "TypeError": "Wrong argument type. Check function signatures and parameter types.",
+        "IndexError": "List index out of range. Verify len(list) > index before accessing.",
+        "KeyError": "Dictionary key not found. Use .get(key, default) or check with 'if key in dict'.",
+        "ZeroDivisionError": "Division by zero. Add check for divisor != 0.",
+        "ImportError": "Module not found. Use only standard library imports.",
+        "AttributeError": "Object doesn't have this attribute. Check object type.",
+        "ValueError": "Invalid value for operation. Validate input before processing."
+    },
+    "version": 1,
+    "last_updated": "2025-12-10"
+}

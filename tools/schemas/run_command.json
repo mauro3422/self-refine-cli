@@ -1,0 +1,32 @@
+{
+    "name": "run_command",
+    "description": "Run a shell command (Windows CMD)",
+    "parameters": {
+        "command": {
+            "type": "string",
+            "description": "Shell command to execute",
+            "required": true
+        }
+    },
+    "examples": [
+        {
+            "tool": "run_command",
+            "params": {
+                "command": "dir sandbox"
+            }
+        },
+        {
+            "tool": "run_command",
+            "params": {
+                "command": "type sandbox\\file.txt"
+            }
+        }
+    ],
+    "error_hints": {
+        "FileNotFoundError": "Command or file not found. Check spelling and path.",
+        "PermissionError": "No permission to execute this command.",
+        "TimeoutError": "Command took too long. Simplify or add limits."
+    },
+    "version": 1,
+    "last_updated": "2025-12-10"
+}

@@ -12,7 +12,12 @@ from core.llm_client import LLMClient
 from core.prompts import EVAL_PROMPT, REFINE_PROMPT
 from core.parsers import extract_tool_call
 from tools.registry import get_registry
-from config.settings import WORKER_TEMPS
+from config.settings import (
+    WORKER_TEMPS, 
+    LIMIT_RESPONSE_PREVIEW, 
+    LIMIT_FEEDBACK_PREVIEW,
+    LIMIT_CODE_PREVIEW
+)
 from .worker import WorkerResponse
 from memory.reflection_buffer import get_buffer as get_reflection_buffer
 
@@ -59,10 +64,14 @@ class SelfRefiner:
         best_verification_passed = False
         
         for i in range(self.max_iterations):
-            # Step 1: FEEDBACK (evaluate response quality) - PARALLEL
+            # Step 1: FEEDBACK (evaluate response quality) - SINGLE WORKER
             eval_start = time.time()
-            print(f"    📊 Parallel evaluation (3 workers)...")
-            score, feedback = self._parallel_evaluate(current_response, task, tools_used)
+            # print(f"    📊 Parallel evaluation (3 workers)...") -> Disabled to save resources
+            print(f"    📊 Evaluation (single supervisor)...")
+            
+            # Use single evaluation instead of parallel to save 2 LLM calls per iter
+            score, feedback = self._evaluate(current_response, task, tools_used)
+            
             eval_time = time.time() - eval_start
             total_eval_time += eval_time
             print(f"    Iter {i+1}: score={score}/25 (eval: {eval_time:.1f}s)")
@@ -129,13 +138,14 @@ class SelfRefiner:
             if reflection_context:
                 extra_context = f"{extra_context}\n\n{reflection_context}" if extra_context else reflection_context
             
-            print(f"    🔄 Parallel refine (3 workers)...")
-            current_response = self._parallel_refine(
+            # OPTIMIZATION 2: Single-worker refine instead of parallel (saves 2 LLM calls/iter)
+            print(f"    🔄 Single-worker refine...")
+            current_response = self._refine_response(
                 current_response, task, combined_feedback, tools_used, extra_context
             )
             refine_time = time.time() - refine_start
             total_refine_time += refine_time
-            print(f"    → Parallel refined ({refine_time:.1f}s)")
+            print(f"    → Refined ({refine_time:.1f}s)")
         
         # Return BEST response, not last response
         print(f"    🏆 Returning best response from iter {best_iteration} (score={best_score}/25)")
@@ -170,7 +180,7 @@ class SelfRefiner:
         eval_prompt = EVAL_PROMPT.format(
             user_input=task,
             tools_used=tools_str,
-            response=response[:1000]
+            response=response[:LIMIT_RESPONSE_PREVIEW]
         )
         
         feedback = self.llm.chat([{"role": "user", "content": eval_prompt}], temp=0.3)
@@ -186,7 +196,7 @@ class SelfRefiner:
         eval_prompt = EVAL_PROMPT.format(
             user_input=task,
             tools_used=tools_str,
-            response=response[:1000]
+            response=response[:LIMIT_RESPONSE_PREVIEW]
         )
         
         temps = [0.2, 0.3, 0.4][:num_workers]
@@ -234,7 +244,7 @@ class SelfRefiner:
             user_input=task,
             tools_used=tools_str,
             tools_schema=tools_schema,
-            feedback=feedback[:800]
+            feedback=feedback[:LIMIT_FEEDBACK_PREVIEW]
         )
         
         if extra_context:
@@ -253,7 +263,7 @@ class SelfRefiner:
             user_input=task,
             tools_used=tools_str,
             tools_schema=tools_schema,
-            feedback=feedback[:800]
+            feedback=feedback[:LIMIT_FEEDBACK_PREVIEW]
         )
         
         if extra_context:
@@ -325,7 +335,7 @@ class SelfRefiner:
         prompt = f"""Generate 3 test cases to verify the python code for this task.
         
 TASK: {task}
-RESPONSE: {response[:800]}
+RESPONSE: {response[:LIMIT_CODE_PREVIEW]}
 
 Return a JSON list of test cases.
 FORMAT:

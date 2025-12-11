@@ -1,0 +1,25 @@
+{
+    "name": "list_dir",
+    "description": "List contents of a directory in the sandbox",
+    "parameters": {
+        "path": {
+            "type": "string",
+            "description": "Directory path to list (must be in sandbox/)",
+            "required": true
+        }
+    },
+    "examples": [
+        {
+            "tool": "list_dir",
+            "params": {
+                "path": "sandbox/"
+            }
+        }
+    ],
+    "error_hints": {
+        "FileNotFoundError": "Directory doesn't exist. Check the path.",
+        "NotADirectoryError": "Path points to a file, not a directory. Use read_file instead."
+    },
+    "version": 1,
+    "last_updated": "2025-12-10"
+}

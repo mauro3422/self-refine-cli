@@ -36,6 +36,17 @@ class ToolExecutor:
         if not tool_call:
             return ""
         
+        # Handle schema requests (two-phase tool selection)
+        if "get_schema" in tool_call:
+            tool_name = tool_call["get_schema"]
+            schema = self.registry.get_full_schema(tool_name)
+            if schema:
+                print(f"    📋 Schema requested: {tool_name}")
+                return f"[SCHEMA] {tool_name}:\n{schema}"
+            else:
+                available = ", ".join(self.registry.list_tools()[:5]) + "..."
+                return f"[ERROR] Tool '{tool_name}' not found. Available: {available}"
+        
         tool_name = tool_call.get("tool", "")
         params = tool_call.get("params", {})
         
@@ -73,7 +84,21 @@ class ToolExecutor:
         if result.get("success"):
             return f"[OK] {tool_name}: {result.get('result', '')}"
         else:
-            return f"[ERROR] {tool_name}: {result.get('error', 'Unknown')}"
+            # Record error for curator pattern learning
+            error_msg = result.get('error', 'Unknown')
+            try:
+                from memory.curator import record_tool_error
+                # Extract error type from message
+                error_type = "UnknownError"
+                for etype in ["SyntaxError", "NameError", "TypeError", "IndexError", 
+                              "KeyError", "ValueError", "FileNotFoundError", "PermissionError"]:
+                    if etype in error_msg:
+                        error_type = etype
+                        break
+                record_tool_error(tool_name, error_type, error_msg)
+            except Exception:
+                pass  # Non-critical
+            return f"[ERROR] {tool_name}: {error_msg}"
     
     def get_success_rate(self) -> float:
         """Calculate overall tool success rate"""

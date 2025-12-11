@@ -126,6 +126,28 @@ class MemoryGraph:
             self.graph[from_id][to_id]["weight"] = max(0.0, current - decay)
             self._save()
     
+    def apply_decay(self, factor: float = 0.99) -> int:
+        """
+        Apply decay to all edge weights. Called periodically by MemoryCurator.
+        
+        Args:
+            factor: Multiplicative decay factor (0.99 = 1% decay per call)
+        
+        Returns:
+            Number of edges decayed
+        """
+        decayed = 0
+        for u, v, data in self.graph.edges(data=True):
+            current = data.get("weight", 0.5)
+            new_weight = current * factor
+            self.graph[u][v]["weight"] = new_weight
+            decayed += 1
+        
+        if decayed > 0:
+            self._save()
+        
+        return decayed
+    
     def stats(self) -> Dict:
         return {
             "nodes": len(self.graph.nodes),

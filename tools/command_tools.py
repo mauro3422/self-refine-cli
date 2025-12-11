@@ -78,7 +78,7 @@ class PythonExecTool(Tool):
     
     @property
     def description(self) -> str:
-        return "Executes Python code directly. DO NOT use for creating files (use write_file). Returns the result."
+        return "Executes Python code directly. WARNING: Code runs in restricted mode. File operations must use absolute paths to 'sandbox/'."
     
     @property
     def parameters(self) -> Dict[str, Dict[str, Any]]:
@@ -90,6 +90,14 @@ class PythonExecTool(Tool):
         }
     
     def execute(self, code: str) -> Dict[str, Any]:
+        # BASIC SAFETY FILTER
+        dangerous_keywords = ["shutil.rmtree", "os.system", "subprocess.call", "subprocess.Popen"]
+        if any(keyword in code for keyword in dangerous_keywords):
+             return {
+                "success": False, 
+                "error": "SECURITY BLOCK: Usage of dangerous functions (rmtree, system, subprocess) is restricted in Software Sandbox mode. Use provided tools instead."
+            }
+
         from core.executor import CodeExecutor
         executor = CodeExecutor()
         result = executor.execute(code)

@@ -6,7 +6,8 @@
 # ===================
 # LLM Server
 # ===================
-SERVER_URL = "http://localhost:8000/v1"  # Local llama.cpp server
+import os
+SERVER_URL = os.getenv("LLM_SERVER_URL", "http://localhost:8000/v1")  # Configurable for Docker
 
 # ===================
 # Model Parameters (LMF2 optimized)
@@ -39,17 +40,62 @@ AUTO_SUCCESS_SCORE = 10         # Score >= this = partial success
 # ===================
 # Memory System
 # ===================
+LLM_PARALLEL_SLOTS = 4          # Total parallel slots in llama.cpp server
 MEMORY_SLOT = 3                 # Dedicated slot for LLMLinker/Evolution (keeps context warm)
 MEMORY_CACHE_SIZE = 100         # Max cached LLM evaluations
 MEMORY_MIN_IMPORTANCE = 5       # Min importance to retrieve
-MAX_SESSIONS_SAVED = 10         # How many session logs to keep
+MAX_SESSIONS_SAVED = 100        # How many session logs to keep (increased from 10)
+DEBUG_MEMORY = False            # Enable verbose memory logging (set True for debugging)
 
 # ===================
 # Agent Execution
 # ===================
 EXECUTION_TIMEOUT = 30          # Seconds for tool execution
 AGENT_MAX_ITERATIONS = 10       # Max agentic loop iterations
-AGENT_WORKSPACE = "sandbox"     # Working directory
+AGENT_WORKSPACE = os.getenv("AGENT_WORKSPACE", "sandbox")     # Working directory
+
+# ===================
+# CONTEXT LIMITS (for LLM prompts)
+# ===================
+# These control how much data is passed to the LLM in various contexts.
+# Higher values = more context = better quality (requires more VRAM)
+# Lower values = faster but may lose important information
+# Set these based on your GPU capacity. With dedicated GPU, use high values.
+
+# --- Prompt Content Limits ---
+LIMIT_TASK_PREVIEW = 500            # Task description in prompts (was 80-200)
+LIMIT_RESPONSE_PREVIEW = 2000       # Response preview in prompts (was 200-600)
+LIMIT_CODE_PREVIEW = 3000           # Code preview in prompts (was 200-300)
+LIMIT_ERROR_PREVIEW = 500           # Error message preview (was 100-200)
+LIMIT_FEEDBACK_PREVIEW = 1000       # Feedback text preview (was 300-400)
+LIMIT_LESSON_PREVIEW = 500          # Lesson text preview (was 100)
+
+# --- Memory System Limits ---
+LIMIT_MEMORY_CANDIDATES = 25        # Max memory candidates to consider (was 15)
+LIMIT_KEYWORDS_PER_MEMORY = 10      # Keywords extracted per memory (was 5)
+LIMIT_KEYWORD_SOURCE_TEXT = 1000    # Text used for keyword extraction (was 300)
+
+# --- Working Memory (File Indexing) ---
+LIMIT_FILE_CHUNK_SIZE = 8000        # Max size per file chunk (was 4000-6000)
+LIMIT_CHUNKS_PER_FILE = 20          # Max chunks per file (was 10)
+
+# --- Learning System ---
+LIMIT_PATTERN_TASK = 300            # Task preview for pattern learning (was 80)
+LIMIT_PATTERN_RESPONSE = 1000       # Response preview for patterns (was 200-300)
+LIMIT_ANALYSIS_TASK = 500           # Task preview for lesson analysis (was 150)
+
+# --- Logging (these can stay lower, just for display) ---
+LIMIT_LOG_TASK = 100                # Task in logs (display only)
+LIMIT_LOG_RESPONSE = 500            # Response in logs (display only)
+LIMIT_LOG_RESULT = 300              # Tool results in logs (display only)
+
+# --- LLM Linker / Ranking ---
+LLM_RANKING_THRESHOLD = 10          # Only use LLM ranking if more than N candidates
+
+# --- Batch Learning ---
+PATTERN_BATCH_SIZE = 5              # Learn patterns every N successful tasks
+HIGH_SCORE_SKIP_THRESHOLD = 20      # Skip lesson LLM if score >= this
+LOW_ITERATION_THRESHOLD = 1         # Skip lesson LLM if iterations <= this
 
 # ===================
 # Paths
@@ -57,4 +103,3 @@ AGENT_WORKSPACE = "sandbox"     # Working directory
 DATA_DIR = "data"           # Persistent: memories, graph, cache
 OUTPUT_DIR = "outputs"      # Transient: logs, sessions
 LOG_FILE = "outputs/refine_history.json"
-

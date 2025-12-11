@@ -5,13 +5,13 @@ import os
 import glob
 from datetime import datetime
 from typing import Dict, Any, List
-from config.settings import OUTPUT_DIR
+from config.settings import OUTPUT_DIR, MAX_SESSIONS_SAVED
 
 
 class PoetiqLogger:
     """Logs all Poetiq session activity for analysis"""
     
-    MAX_SESSIONS = 10  # Keep only last 10 sessions
+    MAX_SESSIONS = MAX_SESSIONS_SAVED  # From settings.py
     
     def __init__(self):
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")

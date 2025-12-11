@@ -1,6 +1,6 @@
 openai
 requests
-chromadb==2.31.0
+chromadb
 pandas==2.1.0
 numpy
 llama-cpp-python

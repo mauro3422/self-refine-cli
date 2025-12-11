@@ -1,0 +1,37 @@
+{
+    "name": "search_files",
+    "description": "Search for text pattern in files",
+    "parameters": {
+        "query": {
+            "type": "string",
+            "description": "Text pattern to search for",
+            "required": true
+        },
+        "path": {
+            "type": "string",
+            "description": "Directory path to search in",
+            "required": true
+        },
+        "extensions": {
+            "type": "string",
+            "description": "File extensions to search (e.g., '.py,.js')",
+            "required": false
+        }
+    },
+    "examples": [
+        {
+            "tool": "search_files",
+            "params": {
+                "query": "def main",
+                "path": "sandbox/",
+                "extensions": ".py"
+            }
+        }
+    ],
+    "error_hints": {
+        "FileNotFoundError": "Directory doesn't exist. Check the path.",
+        "PermissionError": "No permission to read files in this directory."
+    },
+    "version": 1,
+    "last_updated": "2025-12-10"
+}

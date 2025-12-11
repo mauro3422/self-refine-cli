@@ -66,6 +66,63 @@ class MonitoringLogger:
         }
         with open(self.STATUS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, default=str)
+            
+    def _load_history(self) -> Dict:
+        """Load historical session data"""
+        history_file = "outputs/history.json"
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r') as f:
+                    return json.load(f)
+            except:
+                pass
+        return {"sessions": [], "global_avg_score": 0, "global_verify_rate": 0}
+
+    def _save_history_snapshot(self):
+        """Save current session summary to history (on exit or periodic)"""
+        summary = self.get_summary()
+        history = self._load_history()
+        
+        # Update or append current session
+        # We use a simplified key based on session_start to avoid duplicates
+        session_key = self.session_start.isoformat()
+        
+        # Remove if exists (update)
+        history["sessions"] = [s for s in history["sessions"] if s["start"] != session_key]
+        
+        history["sessions"].append({
+            "start": session_key,
+            "tasks": summary["tasks_completed"],
+            "avg_score": summary["avg_score"],
+            "verify_rate": summary["verification_rate"]
+        })
+        
+        # Recalculate globals
+        total_tasks = sum(s["tasks"] for s in history["sessions"])
+        if total_tasks > 0:
+            weighted_score = sum(s["avg_score"] * s["tasks"] for s in history["sessions"]) / total_tasks
+            weighted_verify = sum(s["verify_rate"] * s["tasks"] for s in history["sessions"]) / total_tasks
+            history["global_avg_score"] = weighted_score
+            history["global_verify_rate"] = weighted_verify
+            
+        with open("outputs/history.json", 'w') as f:
+            json.dump(history, f, indent=2)
+
+    def get_trend(self) -> str:
+        """Compare current performance vs history"""
+        history = self._load_history()
+        current = self.get_summary()
+        
+        if not history["sessions"]:
+            return "🆕 First Session"
+            
+        hist_score = history["global_avg_score"]
+        curr_score = current["avg_score"]
+        
+        delta = curr_score - hist_score
+        icon = "📈" if delta > 0 else "📉"
+        
+        return f"{icon} Trend: {curr_score:.1f} (vs {hist_score:.1f} avg)"
     
     def _calculate_health(self) -> str:
         """Calculate system health indicator"""
@@ -122,6 +179,9 @@ class MonitoringLogger:
         self.metrics["durations"].append(duration)
         self.metrics["verified_count"].append(1 if verified else 0)
         self.metrics["skip_count"].append(1 if skipped_refine else 0)
+        
+        # Update history
+        self._save_history_snapshot()
     
     def log_worker_result(self, worker_id: int, verified: bool, attempts: int, 
                           duration: float, slot_id: int = -1):

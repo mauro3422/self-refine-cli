@@ -38,6 +38,6 @@ if not exist llama-server.exe (
 )
 
 :: Run with output to both console AND file using PowerShell tee
-powershell -Command "& { .\llama-server.exe --model 'C:/Users/mauro/.lmstudio/models/LiquidAI/LFM2-1.2B-GGUF/LFM2-1.2B-F16.gguf' --port 8000 --host 0.0.0.0 --n-gpu-layers 999 --ctx-size 32768 --parallel 3 --cont-batching 2>&1 | Tee-Object -FilePath '..\logs\llm_server.log' }"
+powershell -Command "& { .\llama-server.exe --model '..\models\LFM2-1.2B-F16.gguf' --port 8000 --host 0.0.0.0 --n-gpu-layers 999 --ctx-size 32768 --parallel 4 --cont-batching 2>&1 | Tee-Object -FilePath '..\logs\llm_server.log' }"
 
 pause

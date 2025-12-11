@@ -13,6 +13,7 @@ from core.parsers import extract_tool_call
 from tools.registry import get_registry
 from utils.logger import new_session
 from memory.orchestrator import get_orchestrator
+from config.settings import LIMIT_TASK_PREVIEW, LIMIT_RESPONSE_PREVIEW
 from memory.learner import MemoryLearner
 from config.settings import MAX_ITERATIONS, SCORE_THRESHOLD, WORKER_TEMPS
 
@@ -98,7 +99,7 @@ class PoetiqRunner:
         
         # Phase 1: Parallel generation (True Poetiq - workers verify code)
         print(f"\n📡 Phase 1: Parallel generation...")
-        responses, memory_ids_used = self._generate_parallel(task)
+        responses, memory_ids_used = self._generate_parallel(task, test_cases)
         
         logger.log_parallel(responses)
         
@@ -107,7 +108,7 @@ class PoetiqRunner:
         
         # Phase 2: Aggregation (prioritizes verified responses)
         print(f"\n🧠 Phase 2: Aggregating candidates...")
-        winner = self.aggregator.aggregate(responses, task)
+        winner = self.aggregator.select_best_response(responses, task)
         
         logger.log_aggregation(winner.raw_response, winner.duration)
         
@@ -123,17 +124,26 @@ class PoetiqRunner:
         
         tool_name = winner.tool_call.get("tool") if winner.tool_call else None
         
-        # Get pre-refine score to decide if we need refinement
-        from core.prompts import EVAL_PROMPT
-        tools_str = tool_name if tool_name else "None"
-        pre_eval_prompt = EVAL_PROMPT.format(
-            user_input=task[:200],
-            tools_used=tools_str,
-            response=winner.raw_response[:600]
-        )
-        pre_feedback = self.llm.chat([{"role": "user", "content": pre_eval_prompt}], temp=0.2)
-        pre_score = self.refiner._extract_score(pre_feedback)
-        print(f"  📈 Pre-refine score: {pre_score}/25")
+        # OPTIMIZATION 1: Skip pre-eval LLM call if ALL workers verified
+        # When all workers verified, code quality is already proven - no need to evaluate
+        all_verified = verified_count == len(responses) and verified_count > 0
+        
+        if all_verified:
+            # All workers verified their code - skip LLM evaluation entirely
+            pre_score = 22  # Assume high score since all code was verified
+            print(f"  ⚡ SKIP PRE-EVAL: All {verified_count} workers verified → assumed score {pre_score}/25")
+        else:
+            # Need to evaluate since not all verified
+            from core.prompts import EVAL_PROMPT
+            tools_str = tool_name if tool_name else "None"
+            pre_eval_prompt = EVAL_PROMPT.format(
+                user_input=task[:LIMIT_TASK_PREVIEW],
+                tools_used=tools_str,
+                response=winner.raw_response[:LIMIT_RESPONSE_PREVIEW]
+            )
+            pre_feedback = self.llm.chat([{"role": "user", "content": pre_eval_prompt}], temp=0.2)
+            pre_score = self.refiner._extract_score(pre_feedback)
+            print(f"  📈 Pre-refine score: {pre_score}/25")
         
         # OPTIMIZATION: Skip SelfRefiner if workers already verified code AND score is good
         # Threshold 20/25 = 80% ensures high quality before bypassing refinement
@@ -316,7 +326,7 @@ class PoetiqRunner:
             "total_time": total_time
         }
     
-    def _generate_parallel(self, task: str) -> tuple:
+    def _generate_parallel(self, task: str, test_cases: list = None) -> tuple:
         """TRUE POETIQ: Workers execute and verify their own code"""
         temps = WORKER_TEMPS
         responses = []
@@ -325,12 +335,21 @@ class PoetiqRunner:
         memory_context = context.to_prompt()
         memory_ids = context.memory_ids or []
         
+        # Get suggested tools from ContextVectors for two-phase tool selection
+        suggested_tools = context.tools_suggested or ["python_exec"]
+        
         with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
             futures = {}
             for i in range(self.num_workers):
-                worker = LightWorker(i, temps[i % len(temps)], memory_context)
-                # TRUE POETIQ: Workers execute and verify their own code
-                futures[executor.submit(worker.generate_and_verify, task, 2)] = i
+                # Pass suggested_tools for two-phase tool selection
+                worker = LightWorker(
+                    i, 
+                    temps[i % len(temps)], 
+                    memory_context,
+                    suggested_tools=suggested_tools
+                )
+                # TRUE POETIQ: Workers execute and verify their own code with TEST CASES
+                futures[executor.submit(worker.generate_and_verify, task, test_cases, 2)] = i
             
             for future in as_completed(futures):
                 wid = futures[future]

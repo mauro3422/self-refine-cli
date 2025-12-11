@@ -41,7 +41,8 @@ def log(message):
         print(msg, flush=True)
     except:
         try:
-            print(msg.encode('ascii', 'ignore').decode('ascii'), flush=True)
+            # Fallback to simple print if encoding/formatting fails
+            print(message, flush=True)
         except:
             pass
             
@@ -90,17 +91,20 @@ def parse_test_cases(task_text: str) -> list:
     
     test_cases = []
     
-    # Pattern 1: String inputs - solve('...') or solve("...")
-    string_pattern = r"solve\(['\"](.+?)['\"]\)\s*->\s*(.+)"
-    for match in re.finditer(string_pattern, task_text):
+    # Common separator pattern: ->, ==, is, returns
+    sep = r"\s*(?:->|==|is|returns)\s*"
+    
+    # Pattern 1: String inputs - func('...') or func("...")
+    string_pattern = r"(?:solve|[\w_]+)\(['\"](.+?)['\"]\)" + sep + r"(.+)"
+    for match in re.finditer(string_pattern, task_text, re.IGNORECASE):
         input_val = match.group(1)
         expected_raw = match.group(2).strip()
         expected = _safe_parse(expected_raw)
         test_cases.append({"input": input_val, "expected": expected})
     
-    # Pattern 2: Numeric inputs - solve(123), solve(-5), solve(3.14)
-    numeric_pattern = r"solve\((-?\d+\.?\d*)\)\s*->\s*(.+)"
-    for match in re.finditer(numeric_pattern, task_text):
+    # Pattern 2: Numeric inputs - func(123), func(-5), func(3.14)
+    numeric_pattern = r"(?:solve|[\w_]+)\((-?\d+\.?\d*)\)" + sep + r"(.+)"
+    for match in re.finditer(numeric_pattern, task_text, re.IGNORECASE):
         input_raw = match.group(1)
         expected_raw = match.group(2).strip()
         
@@ -110,9 +114,9 @@ def parse_test_cases(task_text: str) -> list:
         if not any(tc["input"] == input_val for tc in test_cases):
             test_cases.append({"input": input_val, "expected": expected})
     
-    # Pattern 3: Boolean inputs - solve(True), solve(False)
-    bool_pattern = r"solve\((True|False)\)\s*->\s*(.+)"
-    for match in re.finditer(bool_pattern, task_text):
+    # Pattern 3: Boolean inputs - func(True), func(False)
+    bool_pattern = r"(?:solve|[\w_]+)\((True|False)\)" + sep + r"(.+)"
+    for match in re.finditer(bool_pattern, task_text, re.IGNORECASE):
         input_raw = match.group(1)
         expected_raw = match.group(2).strip()
         
@@ -122,10 +126,10 @@ def parse_test_cases(task_text: str) -> list:
         if not any(tc["input"] == input_val for tc in test_cases):
             test_cases.append({"input": input_val, "expected": expected})
     
-    # Pattern 4: List/dict/tuple inputs - solve([...]), solve({...}), solve((...))
-    # Uses balanced bracket matching
-    complex_pattern = r"solve\((\[.*?\]|\{.*?\}|\(.*?\))\)\s*->\s*(.+)"
-    for match in re.finditer(complex_pattern, task_text):
+    # Pattern 4: List/dict/tuple inputs - func([...]), func({...}), func((...))
+    # Uses balanced bracket matching (simple approximation)
+    complex_pattern = r"(?:solve|[\w_]+)\((\[.*?\]|\{.*?\}|\(.*?\))\)" + sep + r"(.+)"
+    for match in re.finditer(complex_pattern, task_text, re.IGNORECASE):
         input_raw = match.group(1)
         expected_raw = match.group(2).strip()
         
@@ -142,6 +146,12 @@ def _safe_parse(value_str: str):
     """Safely parse a string representation to Python value using ast.literal_eval."""
     import ast
     
+    value_str = value_str.strip()
+    
+    # Clean up common markdown/formatting artifacts
+    value_str = re.sub(r'^\*\*', '', value_str)  # Remove leading **
+    value_str = re.sub(r'\*\*$', '', value_str)  # Remove trailing **
+    value_str = re.sub(r'\s*\(.*$', '', value_str)  # Remove trailing explanations like "(Count of...)"
     value_str = value_str.strip()
     
     # Try ast.literal_eval first (safe for literals)
@@ -175,22 +185,21 @@ def generate_task(runner):
     # Get difficulty modifier
     difficulty_modifier = tracker.get_difficulty_prompt_modifier()
     
-    # Build category selection
+    # Build category selection - SIMPLIFIED: one task per category
     target_category = None
     if should_target and weakness_category:
-        # Target the weak category
-        category_instruction = f"FOCUS ON: {weakness_category.upper()} category (this is a weakness area that needs practice)"
+        category_instruction = f"FOCUS ON: {weakness_category.upper()} category"
         target_category = weakness_category
         log(f"🎯 Targeting weakness: {weakness_category}")
     else:
-        # Normal random selection
+        # SIMPLIFIED: Pick ONE specific task, not multiple
         category_instruction = (
-            "PICK ONE category randomly from: "
-            "1) STRING: validate email, reverse words, count vowels, check palindrome "
-            "2) MATH: fibonacci nth, is_prime, factorial, sum of digits "
-            "3) LIST: find duplicates, merge sorted lists, remove duplicates "
-            "4) DICT: word frequency, group by key, invert dictionary "
-            "5) VALIDATION: is_valid_url, parse_date, validate_phone "
+            "PICK exactly ONE task from this list:\n"
+            "- STRING: validate_email OR reverse_string OR count_vowels OR is_palindrome\n"
+            "- MATH: fibonacci OR is_prime OR factorial OR sum_of_digits\n"
+            "- LIST: find_duplicates OR remove_duplicates OR find_max\n"
+            "- DICT: word_frequency OR invert_dict\n"
+            "- VALIDATION: is_valid_url OR validate_phone"
         )
     
     # Get learned test pattern suggestions
@@ -198,23 +207,28 @@ def generate_task(runner):
     if target_category:
         patterns = pattern_learner.get_patterns_for_category(target_category, n=2)
         if patterns:
-            test_suggestions = "\n\nLEARNED TEST PATTERNS (use similar patterns):\n"
+            test_suggestions = "\n\nLEARNED TEST PATTERNS:\n"
             for p in patterns:
-                test_suggestions += f"- Input type: {p['input_type']}, Output type: {p['output_type']}\n"
+                test_suggestions += f"- Input: {p['input_type']}, Output: {p['output_type']}\n"
             log(f"📚 Using {len(patterns)} learned test patterns")
     
     prompt = (
-        f"Generate a CODING task that requires implementing a `solve(input)` function.\n\n"
+        f"Generate ONE SPECIFIC coding task (NO CODE!).\n\n"
+        f"RULES:\n"
+        f"1. Pick ONE operation from ONE category only!\n"
+        f"2. DO NOT include any Python code or solution!\n"
+        f"3. The function must be called `solve(input)` - nothing else!\n"
+        f"4. Include exactly 3 test cases.\n\n"
         f"{difficulty_modifier}\n\n"
         f"{category_instruction}{test_suggestions}\n\n"
-        f"FORMAT (REQUIRED):\n"
-        f"Category: [category_name]\n"
-        f"Task: [description]\n"
+        f"EXAMPLE OF CORRECT FORMAT:\n"
+        f"Category: STRING\n"
+        f"Task: Implement `solve(input)` that returns True if input is a palindrome.\n"
         f"Test cases:\n"
-        f"- solve('input1') -> expected1\n"
-        f"- solve('input2') -> expected2\n"
-        f"- solve('input3') -> expected3\n"
-        f"\nReturn ONLY the formatted task with 3 test cases."
+        f"- solve('racecar') -> True\n"
+        f"- solve('hello') -> False\n"
+        f"- solve('level') -> True\n\n"
+        f"NOW GENERATE A SIMILAR TASK (pick a DIFFERENT operation):"
     )
     
     try:
@@ -224,9 +238,9 @@ def generate_task(runner):
     except Exception as e:
         log(f"⚠️ Task Generation Failed: {e}. Fallback to random.")
         tasks = [
-            "Analiza memory/orchestrator.py y mejora la documentacion",
-            "Escribe un test simple para tools/file_tools.py",
-            "Busca y reporta TODOs en el proyecto",
+            "Category: STRING\nTask: Check if a string is a palindrome\nTest cases:\n- solve('racecar') -> True\n- solve('hello') -> False\n- solve('level') -> True",
+            "Category: MATH\nTask: Check if a number is prime\nTest cases:\n- solve(7) -> True\n- solve(4) -> False\n- solve(11) -> True",
+            "Category: LIST\nTask: Find duplicate elements in a list\nTest cases:\n- solve([1,2,2,3]) -> [2]\n- solve([1,1,1]) -> [1]\n- solve([1,2,3]) -> []",
         ]
         return random.choice(tasks)
 
@@ -255,6 +269,19 @@ def main():
                     break
             except FileNotFoundError:
                 pass
+
+            # 0. BLOCKING CONNECTION CHECK (Wait for LLM)
+            # Prevents learning from connection errors when server is down
+            while True:
+                health = llm_client.health_check()
+                if health["healthy"]:
+                    break
+                else:
+                    log(f"⚠️ LLM Server offline. Waiting for connection... (Error: {health.get('error', 'Unknown')})")
+                    # Only log the hint once per downtime cycle to avoid spamming? 
+                    # Actually, repeating it every 10s is fine for visibility in logs.
+                    log("👉 Please start the server: scripts/start_llm.bat") 
+                    time.sleep(10) # Wait 10s before retry
             
             # Health check every N tasks
             if task_count > 0 and task_count % HEALTH_CHECK_INTERVAL == 0:
@@ -319,6 +346,20 @@ def main():
                     skipped_refine=result.get('skipped_refine', False)
                 )
                 
+                # Show global trend and metrics
+                try:
+                    stats = monitor.get_summary()
+                    trend = monitor.get_trend()
+                    log(f" ")
+                    log(f"📊 GLOBAL ANALYTICS:")
+                    log(f"   • Sessions: {len(monitor._load_history().get('sessions', []))}")
+                    log(f"   • Tasks Today: {stats['tasks_completed']}")
+                    log(f"   • {trend}")
+                    log(f"   • Health: {stats['health']}")
+                    log(f" ")
+                except Exception as e:
+                    log(f"⚠️ Metrics Error: {e}")
+                
                 # Learn test patterns from successful verifications
                 if result.get('verification_passed', False) and test_cases:
                     try:
@@ -357,6 +398,13 @@ def main():
                 except Exception as e:
                     log(f"⚠️ Difficulty tracking error: {e}")
                 
+                # Tick Memory Curator (runs curation every 5 iterations in background)
+                try:
+                    from memory.curator import tick_curator
+                    tick_curator()
+                except Exception as e:
+                    pass  # Non-critical, don't log
+                
                 task_count += 1
                 
                 # Checkpoint every 5 tasks
@@ -375,6 +423,8 @@ def main():
             
     except Exception as e:
         log(f"🔥 Critical Worker Failure: {e}")
+        import traceback
+        traceback.print_exc()
         save_checkpoint(task_count, f"critical_error: {e}")
         sys.exit(1)
 

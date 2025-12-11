@@ -1,0 +1,26 @@
+{
+    "name": "read_file",
+    "description": "Read contents of a file from the sandbox directory",
+    "parameters": {
+        "path": {
+            "type": "string",
+            "description": "File path to read (must be in sandbox/)",
+            "required": true
+        }
+    },
+    "examples": [
+        {
+            "tool": "read_file",
+            "params": {
+                "path": "sandbox/config.json"
+            }
+        }
+    ],
+    "error_hints": {
+        "FileNotFoundError": "File doesn't exist. Check the path or use list_dir to see available files.",
+        "PermissionError": "No read permission for this file.",
+        "IsADirectoryError": "Path points to a directory. Use list_dir instead."
+    },
+    "version": 1,
+    "last_updated": "2025-12-10"
+}

@@ -196,6 +196,22 @@ class DynamicSkillHarvester:
             "skill_names": [s["name"] for s in self.index["skills"]],
             "last_updated": self.index.get("last_updated")
         }
+    
+    def list_skills(self) -> List[str]:
+        """
+        Get list of skill names with signatures for lightweight listing.
+        Used in two-phase tool selection.
+        
+        Returns:
+            List of strings like ["func_name(arg1, arg2)", ...]
+        """
+        result = []
+        for skill in self.index.get("skills", []):
+            name = skill.get("name", "unknown")
+            params = skill.get("params", [])
+            signature = f"{name}({', '.join(params)})"
+            result.append(signature)
+        return result
 
 
 # Global instance

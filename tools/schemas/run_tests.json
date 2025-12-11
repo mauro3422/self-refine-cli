@@ -1,0 +1,25 @@
+{
+    "name": "run_tests",
+    "description": "Run pytest on a test file",
+    "parameters": {
+        "path": {
+            "type": "string",
+            "description": "Test file path",
+            "required": true
+        }
+    },
+    "examples": [
+        {
+            "tool": "run_tests",
+            "params": {
+                "path": "sandbox/test_module.py"
+            }
+        }
+    ],
+    "error_hints": {
+        "FileNotFoundError": "Test file doesn't exist. Check the path.",
+        "ModuleNotFoundError": "Required module not installed. Use only standard library."
+    },
+    "version": 1,
+    "last_updated": "2025-12-10"
+}

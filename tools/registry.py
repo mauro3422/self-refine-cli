@@ -33,6 +33,58 @@ class ToolRegistry:
         for name, tool in self._tools.items():
             lines.append(f"- {name}: {tool.description[:60]}...")
         return "\n".join(lines)
+    
+    def get_tools_summary(self, exclude: List[str] = None) -> str:
+        """
+        Lightweight list: name + short description only.
+        Used for tools NOT in the suggested list.
+        
+        Args:
+            exclude: Tool names to exclude (they'll have full schema elsewhere)
+            
+        Returns:
+            Formatted string with lightweight tool list
+        """
+        exclude = exclude or []
+        lines = []
+        for name, tool in self._tools.items():
+            if name not in exclude:
+                short_desc = tool.description[:60]
+                lines.append(f"- {name}: {short_desc}")
+        return "\n".join(lines)
+    
+    def get_full_schema(self, tool_name: str) -> Optional[str]:
+        """
+        Get full schema for ONE tool: description, parameters, examples.
+        Used when agent requests schema for a specific tool.
+        
+        Args:
+            tool_name: Name of the tool to get schema for
+            
+        Returns:
+            Formatted schema string, or None if tool not found
+        """
+        tool = self._tools.get(tool_name)
+        if not tool:
+            return None
+        
+        # Get example from examples dict
+        examples = {
+            "write_file": '{"tool": "write_file", "params": {"path": "sandbox/file.py", "content": "def foo(): pass"}}',
+            "read_file": '{"tool": "read_file", "params": {"path": "sandbox/file.py"}}',
+            "list_dir": '{"tool": "list_dir", "params": {"path": "sandbox/"}}',
+            "python_exec": '{"tool": "python_exec", "params": {"code": "print(2+2)"}}',
+            "run_command": '{"tool": "run_command", "params": {"command": "dir"}}',
+            "search_files": '{"tool": "search_files", "params": {"query": "def main", "path": "sandbox/", "extensions": ".py"}}',
+            "analyze_code_structure": '{"tool": "analyze_code_structure", "params": {"path": "sandbox/main.py"}}',
+            "replace_in_file": '{"tool": "replace_in_file", "params": {"path": "sandbox/file.py", "target": "old_text", "replacement": "new_text"}}',
+            "apply_patch": '{"tool": "apply_patch", "params": {"path": "sandbox/file.py", "original_block": "def old():", "new_block": "def new():"}}',
+            "linter": '{"tool": "linter", "params": {"path": "sandbox/script.py"}}',
+            "run_tests": '{"tool": "run_tests", "params": {"path": "sandbox/test_module.py"}}'
+        }
+        example = examples.get(tool_name, "")
+        
+        return tool.get_schema_string(example=example)
 
     def get_tools_prompt(self) -> str:
         """Get detailed tool definitions with examples for system prompt"""

@@ -1,0 +1,32 @@
+{
+    "name": "write_file",
+    "description": "Write content to a file in the sandbox directory",
+    "parameters": {
+        "path": {
+            "type": "string",
+            "description": "File path (must be in sandbox/)",
+            "required": true
+        },
+        "content": {
+            "type": "string",
+            "description": "Content to write to the file",
+            "required": true
+        }
+    },
+    "examples": [
+        {
+            "tool": "write_file",
+            "params": {
+                "path": "sandbox/hello.py",
+                "content": "print('Hello World')"
+            }
+        }
+    ],
+    "error_hints": {
+        "FileNotFoundError": "Parent directory doesn't exist. Create it first with os.makedirs()",
+        "PermissionError": "No write permission. Check file/folder permissions.",
+        "IsADirectoryError": "Path points to a directory, not a file."
+    },
+    "version": 1,
+    "last_updated": "2025-12-10"
+}

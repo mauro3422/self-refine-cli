@@ -20,8 +20,14 @@ class Aggregator:
     def __init__(self):
         self.llm = LLMClient()
     
-    def aggregate(self, responses: List[WorkerResponse], task: str) -> WorkerResponse:
-        """Aggregate responses - PRIORITIZE verified, PRUNE weak candidates (ToT), FALLBACK if all fail"""
+    def select_best_response(self, responses: List[WorkerResponse], task: str) -> WorkerResponse:
+        """
+        Selects the best response from the candidates.
+        PRIORITIZE verified, PRUNE weak candidates (ToT), FALLBACK if all fail.
+        
+        Note: Currently selects the best single response. 
+        TODO: Implement true synthesis using `synthesize()` for combining multiple high-quality responses.
+        """
         if not responses:
             raise ValueError("No responses to aggregate")
             
@@ -61,6 +67,17 @@ class Aggregator:
             print(f"    ✅ Best candidate: Worker-{best_response.worker_id} (score: {best['score']})")
         
         return best_response
+
+    def synthesize(self, responses: List[WorkerResponse], task: str) -> WorkerResponse:
+        """
+        Combine multiple high-quality responses into a single 'Super Response'.
+        
+        Currently a placeholder for future implementation.
+        Strategy: Use LLM to merge Code A and Code B if both have unique strengths.
+        """
+        # Placeholder for future advanced synthesis
+        # For now, we rely on select_best_response
+        return self.select_best_response(responses, task)
     
     def _evaluate_and_prune(self, responses: List[WorkerResponse], task: str) -> List[Dict]:
         """
