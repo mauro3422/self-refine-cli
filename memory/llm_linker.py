@@ -3,7 +3,7 @@
 
 from typing import List, Dict, Optional, Tuple
 from core.llm_client import LLMClient
-from config.settings import MEMORY_SLOT
+from config.settings import MEMORY_SLOT, LLM_RANKING_THRESHOLD
 from memory.base import get_memory
 
 
@@ -34,11 +34,24 @@ class LLMLinker:
         if not candidates:
             return []
         
-        # If few candidates, no need for LLM ranking
+        # OPTIMIZATION 3: Use heuristic ranking for small memory sets (saves LLM call)
+        # Only use LLM ranking when we have many candidates to choose from
+        
         if len(candidates) <= top_k:
             return candidates
         
-        # Use LLM to rank relevance
+        if len(candidates) <= LLM_RANKING_THRESHOLD:
+            # Heuristic ranking: by importance and recency
+            ranked = sorted(candidates, key=lambda m: (
+                m.get("importance", 5),  # Higher importance first
+                m.get("access_count", 0),  # More accessed first
+                -m.get("id", 0)  # More recent first (higher ID = newer)
+            ), reverse=True)
+            print(f"    📊 Heuristic ranking ({len(candidates)} candidates)")
+            return ranked[:top_k]
+        
+        # Use LLM only for large candidate sets
+        print(f"    🤖 LLM ranking ({len(candidates)} candidates)")
         ranked = self._llm_rank(query, candidates, context)
         
         return ranked[:top_k]

@@ -8,9 +8,8 @@ from memory.context_vectors import get_context_vectors, get_icv, ContextVectors,
 from memory.llm_linker import get_llm_linker, LLMLinker
 from memory.graph import get_memory_graph
 from memory.working_memory import get_working_memory, WorkingMemory
-
-# Debug flag - set to True to see memory retrieval details
-DEBUG_MEMORY = True
+from memory.test_patterns import get_test_patterns
+from config.settings import DEBUG_MEMORY
 
 
 @dataclass
@@ -22,6 +21,7 @@ class MemoryContext:
     tips: str                  # ICV tips
     project_files: List[Dict] = None # Relevant project files (new)
     memory_ids: List[int] = None     # IDs of memories used (for feedback loop)
+    patterns: List[Dict] = None      # Learned test patterns/skills (new)
     
     def to_prompt(self) -> str:
         """Convert to prompt string for LLM"""
@@ -45,6 +45,11 @@ class MemoryContext:
         if self.project_files:
             files_str = "\n".join([f"- {f['path']}: {f['content'][:200]}..." for f in self.project_files])
             parts.append(f"PROJECT CONTEXT (Relevant Files):\n{files_str}")
+            
+        # Learned Patterns (Skills)
+        if self.patterns:
+            patterns_str = "\n".join([f"- Input: {p['input_type']}, Output: {p['output_type']}" for p in self.patterns])
+            parts.append(f"LEARNED SKILLS/PATTERNS:\n{patterns_str}")
         
         return "\n\n".join(parts) if parts else ""
 
@@ -62,6 +67,7 @@ class MemoryOrchestrator:
         self.linker: LLMLinker = get_llm_linker()
         self.graph = get_memory_graph()
         self.working_memory: WorkingMemory = get_working_memory()
+        self.pattern_learner = get_test_patterns()
     
     def get_context(self, query: str, use_llm: bool = True) -> MemoryContext:
         """
@@ -86,6 +92,9 @@ class MemoryOrchestrator:
         
         # 5. Get project context (NEW)
         project_files = self.working_memory.search_project(query)
+        
+        # 6. Get learned patterns (Skills)
+        patterns = self.pattern_learner.get_patterns_for_category(category, n=2)
         
         # DEBUG: Log what we retrieved
         if DEBUG_MEMORY:
@@ -117,7 +126,8 @@ class MemoryOrchestrator:
             tools_suggested=tools,
             tips=tips,
             project_files=project_files,
-            memory_ids=[m.get('id') for m in memories if m.get('id') is not None]
+            memory_ids=[m.get('id') for m in memories if m.get('id') is not None],
+            patterns=patterns
         )
     
     def get_refine_context(self, query: str, current_response: str,

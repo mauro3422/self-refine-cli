@@ -5,7 +5,12 @@ import json
 import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from config.settings import DATA_DIR
+from config.settings import (
+    DATA_DIR, 
+    LIMIT_KEYWORDS_PER_MEMORY,
+    LIMIT_KEYWORD_SOURCE_TEXT,
+    LIMIT_MEMORY_CANDIDATES
+)
 from memory.vector_store import get_vector_memory, CHROMA_AVAILABLE
 from memory.cache import get_cache
 
@@ -172,16 +177,16 @@ class SmartMemory:
             from config.settings import MEMORY_SLOT
             llm = LLMClient()
             
-            prompt = f"""Extract 3-5 semantic keywords from this lesson. Output ONLY comma-separated keywords, nothing else.
+            prompt = f"""Extract 3-10 semantic keywords from this lesson. Output ONLY comma-separated keywords, nothing else.
 
-LESSON: {text[:300]}
+LESSON: {text[:LIMIT_KEYWORD_SOURCE_TEXT]}
 
 KEYWORDS:"""
             
             response = llm.generate(prompt, temp=0.2, slot_id=MEMORY_SLOT)
             # Parse comma-separated keywords
             keywords = [k.strip().lower() for k in response.split(',') if k.strip()]
-            return keywords[:5] if keywords else self._fallback_keywords(text)
+            return keywords[:LIMIT_KEYWORDS_PER_MEMORY] if keywords else self._fallback_keywords(text)
         except:
             return self._fallback_keywords(text)
     
@@ -190,7 +195,7 @@ KEYWORDS:"""
         clean_text = text.lower().replace('*', '').replace('#', '').replace('`', '')
         words = clean_text.split()
         stop_words = {"when", "always", "should", "must", "that", "this", "with", "from", "the", "and", "for"}
-        return [w.strip('.,;:()[]') for w in words if len(w) > 4 and w not in stop_words][:5]
+        return [w.strip('.,;:()[]') for w in words if len(w) > 4 and w not in stop_words][:LIMIT_KEYWORDS_PER_MEMORY]
     
     def _create_links(self, new_entry: Dict) -> None:
         """Create weighted links to related memories"""
@@ -293,7 +298,7 @@ KEYWORDS:"""
             if mem not in candidates and mem.get("importance", 0) >= 5:
                 candidates.append(mem)
         
-        return candidates[:15]  # Max 15 candidates
+        return candidates[:LIMIT_MEMORY_CANDIDATES]  # Max candidates from settings
     
     def _rank_candidates(self, candidates: List[Dict], query: str) -> List[tuple]:
         """Rank candidates using composite score + PageRank centrality"""

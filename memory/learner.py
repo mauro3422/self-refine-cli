@@ -4,11 +4,23 @@
 
 from typing import Dict, List, Optional
 from core.llm_client import LLMClient
-from config.settings import MEMORY_SLOT
+from config.settings import (
+    MEMORY_SLOT, 
+    PATTERN_BATCH_SIZE, 
+    HIGH_SCORE_SKIP_THRESHOLD,
+    LOW_ITERATION_THRESHOLD,
+    LIMIT_PATTERN_TASK,
+    LIMIT_PATTERN_RESPONSE,
+    LIMIT_ANALYSIS_TASK,
+    LIMIT_ERROR_PREVIEW
+)
 from memory.base import get_memory
 from memory.evolution import get_evolution
 from memory.skill_harvester import get_harvester
 
+
+# OPTIMIZATION 4: Batch pattern learning counter (global)
+_successful_task_counter = 0
 
 class MemoryLearner:
     """
@@ -37,23 +49,38 @@ class MemoryLearner:
         success = final_score >= 18 and iterations <= 2
         improved = final_score > initial_score
         
-        # NEW: Learn from verified workers (success patterns + skills)
+        # OPTIMIZATION 4: Batch pattern learning - only every N successful tasks
+        global _successful_task_counter
         success_patterns = []
-        if workers_data:
-            success_patterns = self._learn_success_patterns(task, workers_data)
-            # Also harvest executable skills from verified code
+        
+        if success and workers_data:
+            _successful_task_counter += 1
+            
+            # Only extract patterns every BATCH_SIZE successful tasks
+            if _successful_task_counter >= PATTERN_BATCH_SIZE:
+                success_patterns = self._learn_success_patterns(task, workers_data)
+                _successful_task_counter = 0  # Reset counter
+                print(f"  📚 Batch pattern learning triggered")
+            
+            # Always harvest skills (no LLM call, just code extraction)
             self._harvest_skills_from_workers(task, workers_data)
         
-        # Build analysis prompt with workers data
-        prompt = self._build_analysis_prompt(
-            task, initial_score, final_score, 
-            iterations, tool_results, errors, workers_data
-        )
-        
-        response = self.llm.generate(prompt, temp=0.3, slot_id=MEMORY_SLOT)
-        
-        # Extract structured lessons
-        lessons = self._extract_lessons(response)
+        # OPTIMIZATION 4b: Skip LLM lesson extraction for simple high-score tasks
+        if final_score >= HIGH_SCORE_SKIP_THRESHOLD and iterations <= LOW_ITERATION_THRESHOLD:
+            # High quality, simple task - use heuristic lesson instead of LLM
+            lessons = [f"SUCCESS: {task[:LIMIT_ANALYSIS_TASK]}... completed with high score"]
+            print(f"  ⚡ Skip lesson LLM (high score {final_score})")
+        else:
+            # Build analysis prompt with workers data
+            prompt = self._build_analysis_prompt(
+                task, initial_score, final_score, 
+                iterations, tool_results, errors, workers_data
+            )
+            
+            response = self.llm.generate(prompt, temp=0.3, slot_id=MEMORY_SLOT)
+            
+            # Extract structured lessons
+            lessons = self._extract_lessons(response)
         
         # Add success patterns as lessons too
         lessons.extend(success_patterns)
@@ -128,15 +155,15 @@ class MemoryLearner:
         
         # Get the best verified worker (first attempt = cleanest solution)
         best = min(verified_workers, key=lambda w: w.get('attempts', 1))
-        response_preview = best.get('response', '')[:300]
+        response_preview = best.get('response', '')[:LIMIT_PATTERN_RESPONSE]
         tool_used = best.get('tool', 'python_exec')
         
         # Extract pattern using LLM - IMPROVED PROMPT for abstraction
         prompt = f"""Extract an ABSTRACT success pattern from this verified code.
 
-TASK TYPE: {task[:80]}
+TASK TYPE: {task[:LIMIT_PATTERN_TASK]}
 TOOL: {tool_used}
-CODE PREVIEW: {response_preview[:200]}
+CODE PREVIEW: {response_preview}
 
 INSTRUCTIONS:
 1. Identify the HIGH-LEVEL APPROACH, not the specific code
@@ -232,7 +259,7 @@ PATTERN:"""
     def _build_analysis_prompt(self, task, initial, final, iterations, tools, errors, workers_data=None):
         """Build a strict, concise prompt that generates actionable rules"""
         tools_str = ", ".join(tools.keys()) if isinstance(tools, dict) else str(tools) if tools else "None"
-        errors_str = errors[0][:100] if errors else "None"
+        errors_str = errors[0][:LIMIT_ERROR_PREVIEW] if errors else "None"
         
         # Simplified workers summary
         workers_summary = ""
@@ -244,7 +271,7 @@ PATTERN:"""
         
         return f"""Extract ONE actionable, GENERALIZED rule from this session.
 
-TASK: {task[:150]}
+TASK: {task[:LIMIT_ANALYSIS_TASK]}
 RESULT: {success} (score {initial}→{final}/25, {iterations} iterations)
 TOOLS: {tools_str}
 ERROR: {errors_str}

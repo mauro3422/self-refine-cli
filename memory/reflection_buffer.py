@@ -1,8 +1,11 @@
 # Reflexion Buffer - Intra-session Learning
 # Persists lessons learned during refinement to avoid repeating errors
 
+import json
+import os
 from typing import List, Dict
 from dataclasses import dataclass, field
+from config.settings import OUTPUT_DIR
 
 
 @dataclass
@@ -13,6 +16,23 @@ class Reflection:
     error_summary: str
     lesson: str
     
+    def to_dict(self) -> Dict:
+        return {
+            "iteration": self.iteration,
+            "error_type": self.error_type,
+            "error_summary": self.error_summary,
+            "lesson": self.lesson
+        }
+    
+    @staticmethod
+    def from_dict(data: Dict) -> 'Reflection':
+        return Reflection(
+            iteration=data["iteration"],
+            error_type=data["error_type"],
+            error_summary=data["error_summary"],
+            lesson=data["lesson"]
+        )
+
 
 class ReflectionBuffer:
     """
@@ -29,14 +49,46 @@ class ReflectionBuffer:
     
     MAX_REFLECTIONS = 5  # Keep last N reflections to avoid context bloat
     
-    def __init__(self):
+    def __init__(self, persistence_path: str = None):
         self.reflections: List[Reflection] = []
         self.session_id: str = ""
+        self.persistence_path = persistence_path or os.path.join(OUTPUT_DIR, "reflections.json")
+        os.makedirs(os.path.dirname(self.persistence_path), exist_ok=True)
+        self._load()
     
+    def _load(self):
+        """Load reflections from disk"""
+        if not os.path.exists(self.persistence_path):
+            return
+            
+        try:
+            with open(self.persistence_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.session_id = data.get("session_id", "")
+                self.reflections = [Reflection.from_dict(r) for r in data.get("reflections", [])]
+        except Exception as e:
+            print(f"    ⚠️ Failed to load reflections: {e}")
+            self.reflections = []
+    
+    def _save(self):
+        """Save reflections to disk"""
+        try:
+            data = {
+                "session_id": self.session_id,
+                "reflections": [r.to_dict() for r in self.reflections]
+            }
+            with open(self.persistence_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+        except Exception as e:
+            print(f"    ⚠️ Failed to save reflections: {e}")
+
     def start_session(self, session_id: str):
         """Reset buffer for new session"""
         self.reflections = []
         self.session_id = session_id
+        self._save()
     
     def add(self, iteration: int, error: str, lesson: str):
         """
@@ -65,6 +117,7 @@ class ReflectionBuffer:
         if len(self.reflections) > self.MAX_REFLECTIONS:
             self.reflections = self.reflections[-self.MAX_REFLECTIONS:]
         
+        self._save()
         print(f"    📝 Reflection added: {lesson[:50]}...")
     
     def add_from_error(self, iteration: int, error: str):
@@ -137,7 +190,7 @@ def get_buffer() -> ReflectionBuffer:
 
 # Quick test
 if __name__ == "__main__":
-    buffer = ReflectionBuffer()
+    buffer = ReflectionBuffer("test_reflections.json")
     buffer.start_session("test_session")
     
     buffer.add_from_error(1, "IndexError: list index out of range")

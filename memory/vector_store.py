@@ -76,11 +76,16 @@ class VectorMemory:
         
         doc_id = f"mem_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
         
-        self.collection.add(
-            documents=[text],
-            ids=[doc_id],
-            metadatas=[metadata or {"type": "lesson"}]
-        )
+        # Lock to prevent concurrent modification if fallback to persistent client
+        import threading
+        _chroma_lock = threading.Lock()
+        
+        with _chroma_lock:
+            self.collection.add(
+                documents=[text],
+                ids=[doc_id],
+                metadatas=[metadata or {"type": "lesson"}]
+            )
         return True
     
     def search(self, query: str, n_results: int = 5) -> List[str]:

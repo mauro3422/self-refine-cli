@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  worker:
+    build: .
+    container_name: self-refine-worker
+    volumes:
+      # Mount data and sandbox for persistence
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./sandbox:/app/sandbox
+      - ./logs:/app/logs
+      # Mount source code for hot-reloading (optional, good for dev)
+      - ./core:/app/core
+      - ./memory:/app/memory
+      - ./tools:/app/tools
+      - ./autonomous_loop.py:/app/autonomous_loop.py
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Host networking allows access to llama.cpp on host localhost:8000
+      # But for better isolation we use host.docker.internal
+      - LLM_SERVER_URL=http://host.docker.internal:8000/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    # Limit resources to prevent crashing host
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G

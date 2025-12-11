@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+.git
+.gitignore
+.env
+venv
+outputs/*.json
+outputs/*.log
+sandbox/*
+!sandbox/.gitkeep
+models/
+server/
+logs/
+*.log
+*.tar
