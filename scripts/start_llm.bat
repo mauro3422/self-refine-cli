@@ -21,7 +21,7 @@ if %ERRORLEVEL%==0 (
 
 echo Model: LFM2-1.2B-F16
 echo Port: 8000
-echo Parallel Slots: 3 (optimized for Poetiq)
+echo Parallel Slots: 6 (Workers:3 + Memory:1 + Eval:1 + TaskGen:1)
 echo Context Size: 32K tokens (max for LFM2)
 echo GPU Layers: ALL (Vulkan)
 echo Logging to: logs\llm_server.log
@@ -38,6 +38,6 @@ if not exist llama-server.exe (
 )
 
 :: Run with output to both console AND file using PowerShell tee
-powershell -Command "& { .\llama-server.exe --model '..\models\LFM2-1.2B-F16.gguf' --port 8000 --host 0.0.0.0 --n-gpu-layers 999 --ctx-size 32768 --parallel 4 --cont-batching 2>&1 | Tee-Object -FilePath '..\logs\llm_server.log' }"
+powershell -Command "& { .\llama-server.exe --model '..\models\LFM2-1.2B-F16.gguf' --port 8000 --host 0.0.0.0 --n-gpu-layers 999 --ctx-size 32768 --parallel 6 --cont-batching 2>&1 | Tee-Object -FilePath '..\logs\llm_server.log' }"
 
 pause
