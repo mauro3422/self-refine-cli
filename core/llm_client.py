@@ -117,6 +117,11 @@ class LLMClient:
         last_error = None
         for attempt in range(self.MAX_RETRIES):
             try:
+                # On retry, disable cache to force slot reset (prevents GGML_ASSERT crash)
+                if attempt > 0:
+                    payload["cache_prompt"] = False
+                    time.sleep(0.5)  # Small delay to let slot fully reset
+                
                 response = requests.post(
                     f"{self.native_url}/completion",
                     json=payload,
@@ -127,8 +132,21 @@ class LLMClient:
                     self.consecutive_errors = 0
                     result = response.json()
                     return result.get("content", "")
+                elif response.status_code == 503:
+                    # Server busy - wait and retry
+                    raise Exception(f"Server busy (503) - slot {slot_id} may be in use")
                 else:
                     raise Exception(f"HTTP {response.status_code}: {response.text[:100]}")
+                    
+            except requests.exceptions.ConnectionError as e:
+                # Server crashed or unreachable
+                last_error = e
+                self.consecutive_errors += 1
+                print(f"    🔴 LLM SERVER DOWN (slot {slot_id}): {str(e)[:50]}")
+                if attempt < self.MAX_RETRIES - 1:
+                    delay = self.RETRY_DELAY_BASE * (2 ** attempt) * 2  # Longer delay for crashes
+                    print(f"    ⏳ Waiting {delay}s before retry...")
+                    time.sleep(delay)
                     
             except Exception as e:
                 last_error = e
