@@ -107,12 +107,20 @@ class LLMClient:
             "temperature": temp,
             "n_predict": MAX_TOKENS,
             "id_slot": slot_id,  # KEY: Assign to specific slot!
-            "cache_prompt": True,  # Reuse cached context
+            "cache_prompt": True,  # Default to True, but disable for sensitive slots below
             "repeat_penalty": 1.1,  # Standard repetition penalty
             "frequency_penalty": 0.5,
             "presence_penalty": 0.5,
             "stop": ["</s>", "[INST]", "[/INST]", "User:", "Human:"],
         }
+        
+        # CRITICAL STABILITY FIX:
+        # Slots >= 3 (Memory, Evaluator, TaskGen) process highly variable prompts.
+        # Reusing context often fails to truncate correctly in llama.cpp, causing GGML_ASSERT crash.
+        # STARTING with cache_prompt=False forces a clean slot reset every time.
+        if slot_id >= 3:
+            payload["cache_prompt"] = False
+            time.sleep(0.2)  # Small safety delay for slot release
         
         last_error = None
         for attempt in range(self.MAX_RETRIES):
